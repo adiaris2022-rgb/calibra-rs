@@ -1,1 +1,377 @@
-<!doctype html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CALIBRA RS</title><style>body{font-family:system-ui;margin:0;background:#f5f7fa;color:#172033}header{background:#fff;padding:18px 24px;border-bottom:1px solid #e5e7eb}main{max-width:1100px;margin:auto;padding:24px}.brand{font-weight:800;font-size:22px}.sub{color:#667085}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:18px}.num{font-size:30px;font-weight:800;margin-top:8px}.alert{margin-top:20px;border-left:5px solid #d92d20}.btn{display:inline-block;margin-top:12px;padding:11px 16px;border-radius:10px;background:#172033;color:#fff;text-decoration:none}</style></head><body><header><div class="brand">CALIBRA RS</div><div class="sub">Medical Equipment Control Tower</div></header><main><h1>Executive Dashboard</h1><p class="sub">Prototype MVP — data demo</p><section class="grid"><div class="card">TOTAL ALAT<div class="num" id="equipment">—</div></div><div class="card">KALIBRASI VALID<div class="num" id="valid">—</div></div><div class="card">SEGERA JATUH TEMPO<div class="num" id="nearDue">—</div></div><div class="card">EXPIRED<div class="num" id="expired">—</div></div></section><div class="card alert"><b>Temuan terbaru</b><p id="finding">Memuat…</p><a class="btn" href="#">Lihat Detail</a></div></main><script>fetch('/api/dashboard').then(r=>r.json()).then(d=>{for(const k of ['equipment','valid','nearDue','expired'])document.getElementById(k).textContent=d[k].toLocaleString('id-ID');const x=d.recent[0];document.getElementById('finding').textContent=`${x.equipment} (${x.code}) — ${x.finding} — ${x.time}`})</script></body></html>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CALIBRA RS</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,Helvetica,sans-serif;
+  background:#f4f6f9;
+  color:#172033
+}
+header{
+  background:white;
+  padding:20px 28px;
+  border-bottom:1px solid #e5e7eb;
+}
+.brand{
+  font-size:26px;
+  font-weight:800;
+}
+.subtitle{
+  color:#7b8494;
+  margin-top:4px;
+}
+.container{
+  max-width:1100px;
+  margin:0 auto;
+  padding:32px 20px;
+}
+.login{
+  max-width:420px;
+  margin:60px auto;
+  background:white;
+  padding:32px;
+  border-radius:18px;
+  box-shadow:0 10px 30px rgba(0,0,0,.08);
+}
+.login h1{
+  margin-top:0;
+}
+label{
+  display:block;
+  margin:16px 0 7px;
+  font-weight:600;
+}
+input{
+  width:100%;
+  padding:14px;
+  border:1px solid #d7dce4;
+  border-radius:10px;
+  font-size:16px;
+}
+button{
+  border:0;
+  border-radius:10px;
+  padding:13px 18px;
+  background:#172033;
+  color:white;
+  font-size:15px;
+  cursor:pointer;
+}
+.login button{
+  width:100%;
+  margin-top:22px;
+}
+.error{
+  color:#c62828;
+  margin-top:15px;
+  display:none;
+}
+.demo{
+  margin-top:22px;
+  padding:14px;
+  background:#f5f7fa;
+  border-radius:10px;
+  font-size:13px;
+  color:#596273;
+}
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:15px;
+  flex-wrap:wrap;
+}
+.role{
+  color:#667085;
+  margin-top:5px;
+}
+.cards{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:18px;
+  margin-top:28px;
+}
+.card{
+  background:white;
+  padding:24px;
+  border-radius:16px;
+  border:1px solid #e5e7eb;
+}
+.card .label{
+  color:#667085;
+  font-size:14px;
+}
+.card .value{
+  font-size:32px;
+  font-weight:800;
+  margin-top:10px;
+}
+.finding{
+  background:white;
+  margin-top:25px;
+  padding:25px;
+  border-radius:16px;
+  border-left:5px solid #d92d20;
+}
+.hidden{
+  display:none!important;
+}
+.status{
+  margin-top:15px;
+  color:#667085;
+}
+@media(max-width:800px){
+  .cards{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:500px){
+  .cards{grid-template-columns:1fr}
+  .container{padding:20px 15px}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="brand">CALIBRA RS</div>
+  <div class="subtitle">Medical Equipment Control Tower</div>
+</header>
+
+<!-- LOGIN -->
+<section id="loginPage" class="container">
+  <div class="login">
+
+    <h1>Masuk ke CALIBRA RS</h1>
+    <p class="subtitle">
+      Pusat kendali peralatan medis rumah sakit
+    </p>
+
+    <label>Username</label>
+    <input id="username" type="text" placeholder="Masukkan username">
+
+    <label>Password</label>
+    <input id="password" type="password" placeholder="Masukkan password">
+
+    <button onclick="login()">MASUK</button>
+
+    <div id="error" class="error">
+      Username atau password salah.
+    </div>
+
+    <div class="demo">
+      <b>Akun demo:</b><br><br>
+      Direksi: <b>direksi</b> / <b>calibra123</b><br>
+      PJ / IPSRS: <b>pj</b> / <b>calibra123</b><br>
+      Petugas: <b>petugas</b> / <b>calibra123</b>
+    </div>
+
+  </div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="dashboardPage" class="container hidden">
+
+  <div class="topbar">
+    <div>
+      <h1 id="dashboardTitle">Dashboard</h1>
+      <div id="roleText" class="role"></div>
+    </div>
+
+    <button onclick="logout()">Keluar</button>
+  </div>
+
+  <div class="cards">
+
+    <div class="card">
+      <div class="label">TOTAL ALAT</div>
+      <div id="equipment" class="value">-</div>
+    </div>
+
+    <div class="card">
+      <div class="label">KALIBRASI VALID</div>
+      <div id="valid" class="value">-</div>
+    </div>
+
+    <div class="card">
+      <div class="label">SEGERA JATUH TEMPO</div>
+      <div id="nearDue" class="value">-</div>
+    </div>
+
+    <div class="card">
+      <div class="label">EXPIRED</div>
+      <div id="expired" class="value">-</div>
+    </div>
+
+  </div>
+
+  <div class="finding">
+    <h2>Temuan Terbaru</h2>
+
+    <p id="findingText">
+      Memuat data...
+    </p>
+
+    <button onclick="lihatDetail()">
+      Lihat Detail
+    </button>
+
+    <div id="status" class="status"></div>
+  </div>
+
+</section>
+
+<script>
+
+const USERS = {
+  direksi:{
+    password:"calibra123",
+    role:"DIREKSI",
+    title:"Executive Dashboard"
+  },
+  pj:{
+    password:"calibra123",
+    role:"PENANGGUNG JAWAB / IPSRS",
+    title:"Dashboard Penanggung Jawab"
+  },
+  petugas:{
+    password:"calibra123",
+    role:"PETUGAS LAPANGAN",
+    title:"Mobile Field Dashboard"
+  }
+};
+
+function login(){
+
+  const username =
+    document.getElementById("username").value.trim().toLowerCase();
+
+  const password =
+    document.getElementById("password").value;
+
+  const user = USERS[username];
+
+  if(!user || user.password !== password){
+
+    document.getElementById("error").style.display="block";
+    return;
+  }
+
+  localStorage.setItem("calibraUser",username);
+
+  document.getElementById("error").style.display="none";
+  document.getElementById("loginPage").classList.add("hidden");
+  document.getElementById("dashboardPage").classList.remove("hidden");
+
+  document.getElementById("dashboardTitle").textContent=user.title;
+  document.getElementById("roleText").textContent=
+    "Login sebagai " + user.role;
+
+  loadDashboard();
+}
+
+function logout(){
+
+  localStorage.removeItem("calibraUser");
+
+  document.getElementById("dashboardPage")
+    .classList.add("hidden");
+
+  document.getElementById("loginPage")
+    .classList.remove("hidden");
+
+  document.getElementById("username").value="";
+  document.getElementById("password").value="";
+}
+
+async function loadDashboard(){
+
+  const status =
+    document.getElementById("status");
+
+  try{
+
+    const response =
+      await fetch("/api/dashboard");
+
+    if(!response.ok)
+      throw new Error("API error");
+
+    const data =
+      await response.json();
+
+    document.getElementById("equipment")
+      .textContent =
+      Number(data.equipment || 0).toLocaleString("id-ID");
+
+    document.getElementById("valid")
+      .textContent =
+      Number(data.valid || 0).toLocaleString("id-ID");
+
+    document.getElementById("nearDue")
+      .textContent =
+      Number(data.nearDue || 0).toLocaleString("id-ID");
+
+    document.getElementById("expired")
+      .textContent =
+      Number(data.expired || 0).toLocaleString("id-ID");
+
+    if(data.recent && data.recent.length){
+
+      const item=data.recent[0];
+
+      document.getElementById("findingText").textContent =
+        `${item.equipment} (${item.code}) — ${item.finding} — ${item.time}`;
+
+    }
+
+    status.textContent="API terhubung.";
+
+  }catch(error){
+
+    status.textContent =
+      "Dashboard gagal mengambil data API.";
+
+  }
+}
+
+function lihatDetail(){
+
+  alert(
+    "Detail temuan akan dikembangkan pada modul Inspection & Field Report."
+  );
+
+}
+
+/* Cek sesi login */
+const savedUser =
+  localStorage.getItem("calibraUser");
+
+if(savedUser && USERS[savedUser]){
+
+  const user=USERS[savedUser];
+
+  document.getElementById("loginPage")
+    .classList.add("hidden");
+
+  document.getElementById("dashboardPage")
+    .classList.remove("hidden");
+
+  document.getElementById("dashboardTitle")
+    .textContent=user.title;
+
+  document.getElementById("roleText")
+    .textContent="Login sebagai "+user.role;
+
+  loadDashboard();
+}
+
+</script>
+
+</body>
+</html>
