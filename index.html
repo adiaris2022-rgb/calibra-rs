@@ -1320,10 +1320,11 @@ async function previewExcel(){
         html += `
           <tr>
             <td>${escapeHtml(
-              row.asset_code ||
-              row.code ||
-              row.kode_aset ||
-              "-"
+              row.assetCode ||
+row.asset_code ||
+row.code ||
+row.kode_aset ||
+"-"
             )}</td>
 
             <td>${escapeHtml(
