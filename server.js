@@ -457,7 +457,60 @@ if (!result.rows.length) {
     });
   }
 });
+/* QR: GET BY ASSET CODE */
+app.get("/api/equipment/:code/qr", async (req, res) => {
+  if (!needDb(res)) return;
 
+  const code = clean(req.params.code);
+
+  if (!code) {
+    return res.status(400).json({
+      ok: false,
+      error: "Kode alat wajib diisi."
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, asset_code, name
+       FROM equipment
+       WHERE asset_code = $1
+       LIMIT 1`,
+      [code]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: "Alat dengan kode tersebut tidak ditemukan."
+      });
+    }
+
+    const equipment = result.rows[0];
+
+    const qrData = JSON.stringify({
+      app: "CALIBRA RS",
+      equipmentId: equipment.id,
+      assetCode: equipment.asset_code
+    });
+
+    const qr = await QRCode.toDataURL(qrData);
+
+    res.json({
+      ok: true,
+      id: equipment.id,
+      code: equipment.asset_code,
+      name: equipment.name,
+      qr
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
 /* QR: INTEGRATE / GENERATE / COMPANION */
 app.post("/api/equipment/:id/qr", async (req, res) => {
   if (!needDb(res)) return;
