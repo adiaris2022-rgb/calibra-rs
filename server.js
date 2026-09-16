@@ -403,17 +403,9 @@ app.post("/api/import-excel/confirm", upload.single("file"), async (req, res) =>
           updated_at
         )
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
-        ON CONFLICT (hospital_id, asset_code)
-        DO UPDATE SET
-          name = EXCLUDED.name,
-          brand = EXCLUDED.brand,
-          model = EXCLUDED.model,
-          serial_number = EXCLUDED.serial_number,
-          room = EXCLUDED.room,
-          calibration_date = EXCLUDED.calibration_date,
-          due_date = EXCLUDED.due_date,
-          updated_at = NOW()
-        RETURNING id
+        DO NOTHING
+RETURNING id
+          
       `, [
         hospitalId,
         item.assetCode,
@@ -425,7 +417,10 @@ app.post("/api/import-excel/confirm", upload.single("file"), async (req, res) =>
         item.calibrationDate || null,
         item.dueDate || null
       ]);
-
+if (!result.rows.length) {
+  skipped++;
+  continue;
+}
       const equipmentId = result.rows[0].id;
 
       await pool.query(`
