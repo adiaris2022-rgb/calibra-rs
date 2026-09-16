@@ -403,7 +403,8 @@ app.post("/api/import-excel/confirm", upload.single("file"), async (req, res) =>
           updated_at
         )
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
-        DO NOTHING
+   ON CONFLICT (hospital_id, asset_code)
+DO NOTHING
 RETURNING id
           
       `, [
