@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const XLSX = require("xlsx");
 const { Pool } = require("pg");
-
+const QRCode = require("qrcode");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
