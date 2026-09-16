@@ -7,129 +7,1692 @@
 
 <style>
 *{box-sizing:border-box}
+
 body{
   margin:0;
   font-family:Arial,Helvetica,sans-serif;
   background:#f4f6f9;
   color:#172033;
 }
+
+button,input,select,textarea{
+  font:inherit;
+}
+
+button{
+  cursor:pointer;
+}
+
+.hidden{
+  display:none!important;
+}
+
+/* LOGIN */
+#loginPage{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+
+.login-card{
+  width:100%;
+  max-width:430px;
+  background:#fff;
+  border:1px solid #e2e7ee;
+  border-radius:20px;
+  padding:30px;
+  box-shadow:0 15px 40px rgba(0,0,0,.08);
+}
+
+.logo{
+  font-size:30px;
+  font-weight:800;
+  margin-bottom:5px;
+}
+
+.login-subtitle{
+  color:#718096;
+  margin-bottom:25px;
+}
+
+label{
+  display:block;
+  font-size:14px;
+  font-weight:700;
+  margin:14px 0 7px;
+}
+
+input,select,textarea{
+  width:100%;
+  padding:12px 14px;
+  border:1px solid #d9e0e8;
+  border-radius:10px;
+  background:#fff;
+}
+
+textarea{
+  min-height:100px;
+  resize:vertical;
+}
+
+.primary{
+  background:#172033;
+  color:#fff;
+  border:0;
+  border-radius:10px;
+  padding:13px 18px;
+  font-weight:700;
+}
+
+.secondary{
+  background:#e9edf3;
+  color:#172033;
+  border:0;
+  border-radius:10px;
+  padding:13px 18px;
+  font-weight:700;
+}
+
+.danger{
+  background:#b42318;
+  color:#fff;
+  border:0;
+  border-radius:10px;
+  padding:13px 18px;
+  font-weight:700;
+}
+
+.demo-box{
+  margin-top:20px;
+  padding:14px;
+  border-radius:12px;
+  background:#f4f6f9;
+  font-size:13px;
+  line-height:1.6;
+}
+
+.error{
+  margin-top:12px;
+  color:#b42318;
+  font-size:14px;
+}
+
+/* APP */
+#app{
+  min-height:100vh;
+}
+
 header{
   background:#fff;
   padding:20px 28px;
   border-bottom:1px solid #e5e7eb;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:20px;
 }
+
 .brand{
-  font-size:26px;
+  font-size:25px;
   font-weight:800;
 }
+
 .subtitle{
   color:#7b8494;
   margin-top:4px;
 }
+
+.user-box{
+  text-align:right;
+  font-size:14px;
+}
+
+.user-role{
+  color:#7b8494;
+  margin-bottom:5px;
+}
+
 .container{
-  max-width:1100px;
+  max-width:1200px;
   margin:auto;
-  padding:28px 20px;
+  padding:25px 20px;
 }
-.login{
-  max-width:560px;
-  margin:70px auto;
-}
-.card{
-  background:#fff;
-  border:1px solid #e5e7eb;
-  border-radius:18px;
-  padding:26px;
-  margin-bottom:20px;
-  box-shadow:0 4px 18px rgba(23,32,51,.05);
-}
-h1,h2,h3{margin-top:0}
-input,select,textarea{
-  width:100%;
-  padding:13px 14px;
-  border:1px solid #d7dce4;
-  border-radius:10px;
-  font-size:15px;
-  margin-top:7px;
-}
-textarea{min-height:110px}
-button{
-  border:0;
-  border-radius:10px;
-  padding:13px 18px;
-  background:#172033;
-  color:white;
-  font-size:15px;
-  cursor:pointer;
-}
-button.secondary{
-  background:#eef2f7;
-  color:#172033;
-}
-button.success{background:#16834b}
-button.danger{background:#c62828}
-button.full{width:100%;margin-top:20px}
-label{
-  display:block;
-  margin-top:15px;
-  font-weight:600;
-}
-.demo{
-  background:#eef7ff;
-  padding:16px;
-  border-radius:12px;
-  margin-top:18px;
-  line-height:1.6;
-}
-.error{
-  color:#c62828;
-  margin-top:12px;
-}
-.topbar{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:15px;
-  flex-wrap:wrap;
-  margin-bottom:20px;
-}
+
 .nav{
   display:flex;
   gap:8px;
   flex-wrap:wrap;
   margin-bottom:20px;
 }
+
+.nav button{
+  border:0;
+  border-radius:9px;
+  padding:10px 14px;
+  background:#e9edf3;
+  color:#172033;
+  font-weight:700;
+}
+
 .nav button.active{
   background:#172033;
   color:#fff;
 }
-.nav button{
-  background:#e9edf3;
-  color:#172033;
+
+.section{
+  display:none;
 }
+
+.section.active{
+  display:block;
+}
+
+.page-title{
+  margin:0 0 5px;
+  font-size:25px;
+}
+
+.page-desc{
+  color:#718096;
+  margin:0 0 22px;
+}
+
+/* DASHBOARD */
 .grid{
   display:grid;
   grid-template-columns:repeat(4,1fr);
   gap:15px;
 }
+
 .stat{
   background:#fff;
   border:1px solid #e5e7eb;
   border-radius:16px;
   padding:20px;
 }
+
 .stat .label{
   color:#7b8494;
   font-size:14px;
 }
+
 .stat .value{
   font-size:32px;
   font-weight:800;
   margin-top:10px;
 }
-.section{display:none}
-.section.active{display:block}
+
+.card{
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:16px;
+  padding:20px;
+  margin-top:20px;
+}
+
+.card h3{
+  margin-top:0;
+}
+
+.table-wrap{
+  overflow-x:auto;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:650px;
+}
+
+th,td{
+  padding:12px 10px;
+  border-bottom:1px solid #edf0f4;
+  text-align:left;
+  font-size:14px;
+}
+
+th{
+  color:#667085;
+  font-size:13px;
+}
+
 .badge{
   display:inline-block;
   padding:6px 9px;
   border-radius:999px;
+  font-size:12px;
+  font-weight:700;
+  background:#e9edf3;
+}
+
+.badge.ok{
+  background:#dff7e8;
+  color:#087443;
+}
+
+.badge.warning{
+  background:#fff0c2;
+  color:#8a5a00;
+}
+
+.badge.danger{
+  background:#fee4e2;
+  color:#b42318;
+}
+
+/* FORMS */
+.form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:15px;
+}
+
+.actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+
+.notice{
+  padding:15px;
+  border-radius:12px;
+  margin:10px 0;
+  line-height:1.6;
+}
+
+.notice.blue{
+  background:#e9f2ff;
+}
+
+.notice.green{
+  background:#e7f8ee;
+}
+
+.notice.orange{
+  background:#fff4df;
+}
+
+/* MOBILE */
+@media(max-width:800px){
+  header{
+    padding:16px;
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .user-box{
+    text-align:left;
+  }
+
+  .grid{
+    grid-template-columns:repeat(2,1fr);
+  }
+
+  .form-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+@media(max-width:480px){
+  .grid{
+    grid-template-columns:1fr;
+  }
+
+  .container{
+    padding:18px 14px;
+  }
+
+  .login-card{
+    padding:22px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div id="loginPage">
+
+  <div class="login-card">
+
+    <div class="logo">CALIBRA RS</div>
+    <div class="login-subtitle">
+      Medical Equipment Control Tower
+    </div>
+
+    <label>Username</label>
+    <input id="username" placeholder="Masukkan username">
+
+    <label>Password</label>
+    <input id="password" type="password" placeholder="Masukkan password">
+
+    <button class="primary" style="width:100%;margin-top:20px"
+      onclick="login()">
+      Masuk ke Control Tower
+    </button>
+
+    <div id="loginError" class="error"></div>
+
+    <div class="demo-box">
+      <b>Demo Login</b><br>
+      Direksi: <b>direksi</b> / <b>calibra123</b><br>
+      Penanggung Jawab: <b>pj</b> / <b>calibra123</b><br>
+      Petugas Lapangan: <b>petugas</b> / <b>calibra123</b>
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- APPLICATION -->
+<div id="app" class="hidden">
+
+<header>
+
+  <div>
+    <div class="brand">CALIBRA RS</div>
+    <div class="subtitle">
+      Medical Equipment Control Tower
+    </div>
+  </div>
+
+  <div class="user-box">
+    <div id="currentUser"></div>
+    <div id="currentRole" class="user-role"></div>
+    <button class="secondary" onclick="logout()">
+      Keluar
+    </button>
+  </div>
+
+</header>
+
+
+<div class="container">
+
+  <div class="nav">
+
+    <button class="active"
+      onclick="showSection('dashboard',this)">
+      Dashboard
+    </button>
+
+    <button
+      onclick="showSection('equipment',this)">
+      Data Alat
+    </button>
+
+    <button
+      onclick="showSection('import',this)">
+      Import Excel
+    </button>
+
+    <button
+      onclick="showSection('qr',this)">
+      QR & Identitas
+    </button>
+
+    <button
+      onclick="showSection('field',this)">
+      Petugas Lapangan
+    </button>
+
+    <button
+      onclick="showSection('reports',this)">
+      Laporan
+    </button>
+
+  </div>
+
+
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="section active">
+
+    <h1 class="page-title">
+      Control Tower
+    </h1>
+
+    <p class="page-desc">
+      Pantau kondisi alat medis, kalibrasi, inspeksi,
+      dan laporan lapangan dalam satu tempat.
+    </p>
+
+    <div class="grid">
+
+      <div class="stat">
+        <div class="label">Total Alat</div>
+        <div id="statEquipment" class="value">-</div>
+      </div>
+
+      <div class="stat">
+        <div class="label">Kalibrasi Valid</div>
+        <div id="statValid" class="value">-</div>
+      </div>
+
+      <div class="stat">
+        <div class="label">Mendekati Jatuh Tempo</div>
+        <div id="statNearDue" class="value">-</div>
+      </div>
+
+      <div class="stat">
+        <div class="label">Kalibrasi Expired</div>
+        <div id="statExpired" class="value">-</div>
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>Ringkasan Temuan</h3>
+
+      <div class="grid">
+
+        <div class="stat">
+          <div class="label">Open Findings</div>
+          <div id="statFindings" class="value">-</div>
+        </div>
+
+        <div class="stat">
+          <div class="label">Status Server</div>
+          <div id="serverStatus" class="value"
+            style="font-size:20px">
+            Mengecek...
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>Aktivitas Terbaru</h3>
+
+      <div id="recentActivity">
+        Memuat data...
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <!-- EQUIPMENT -->
+  <section id="equipment" class="section">
+
+    <h1 class="page-title">
+      Data Alat
+    </h1>
+
+    <p class="page-desc">
+      Database master seluruh alat kesehatan.
+    </p>
+
+    <div class="card">
+
+      <div class="actions">
+        <button class="primary"
+          onclick="loadEquipment()">
+          Refresh Data
+        </button>
+      </div>
+
+      <div class="table-wrap">
+
+        <table>
+
+          <thead>
+            <tr>
+              <th>Kode</th>
+              <th>Nama Alat</th>
+              <th>Merk</th>
+              <th>Model</th>
+              <th>No. Seri</th>
+              <th>Ruangan</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+
+          <tbody id="equipmentTable">
+
+            <tr>
+              <td colspan="7">
+                Belum ada data.
+              </td>
+            </tr>
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <!-- IMPORT -->
+  <section id="import" class="section">
+
+    <h1 class="page-title">
+      Import Excel
+    </h1>
+
+    <p class="page-desc">
+      Masukkan database alat rumah sakit dari Excel.
+    </p>
+
+    <div class="notice blue">
+      <b>Alur:</b>
+      Upload Excel → Preview → Validasi →
+      Konfirmasi Import → Database CALIBRA RS.
+    </div>
+
+    <div class="card">
+
+      <label>Pilih File Excel</label>
+
+      <input id="excelFile"
+        type="file"
+        accept=".xlsx,.xls">
+
+      <div class="actions">
+
+        <button class="primary"
+          onclick="previewExcel()">
+          Preview Excel
+        </button>
+
+      </div>
+
+      <div id="importResult"></div>
+
+    </div>
+
+  </section>
+
+
+  <!-- QR -->
+  <section id="qr" class="section">
+
+    <h1 class="page-title">
+      QR & Identitas Alat
+    </h1>
+
+    <p class="page-desc">
+      CALIBRA RS tidak harus mengganti QR atau barcode
+      rumah sakit yang sudah ada.
+    </p>
+
+    <div class="notice green">
+      <b>INTEGRASI</b><br>
+      QR/barcode lama dipetakan ke alat CALIBRA RS.
+    </div>
+
+    <div class="notice blue">
+      <b>GENERATE</b><br>
+      Jika alat belum mempunyai QR,
+      CALIBRA RS dapat membuat identitas QR baru.
+    </div>
+
+    <div class="notice orange">
+      <b>QR PENDAMPING</b><br>
+      Jika QR lama tidak kompatibel,
+      QR lama tetap dipertahankan dan CALIBRA RS
+      menggunakan QR pendamping.
+    </div>
+
+    <div class="card">
+
+      <h3>Identifikasi Alat</h3>
+
+      <label>ID / Kode Alat</label>
+
+      <input id="qrEquipmentId"
+        placeholder="Contoh: ICU-101">
+
+      <div class="actions">
+
+        <button class="primary"
+          onclick="getEquipmentQR()">
+          Tampilkan QR
+        </button>
+
+      </div>
+
+      <div id="qrResult"
+        style="margin-top:20px;text-align:center">
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <!-- FIELD -->
+  <section id="field" class="section">
+
+    <h1 class="page-title">
+      Petugas Lapangan
+    </h1>
+
+    <p class="page-desc">
+      Petugas cukup menggunakan HP untuk melakukan
+      inspeksi dan mengirim evidence.
+    </p>
+
+    <div class="card">
+
+      <div class="notice blue">
+        <b>Alur lapangan</b><br>
+        Scan QR → pilih alat → inspeksi →
+        catat kondisi → foto evidence bila diperlukan →
+        kirim laporan.
+      </div>
+
+      <label>Kode / QR Alat</label>
+
+      <input id="fieldCode"
+        placeholder="Contoh: ICU-101">
+
+      <label>Kondisi Alat</label>
+
+      <select id="fieldCondition">
+
+        <option value="BAIK">
+          Baik
+        </option>
+
+        <option value="PERLU_PERHATIAN">
+          Perlu Perhatian
+        </option>
+
+        <option value="RUSAK">
+          Rusak
+        </option>
+
+      </select>
+
+      <label>Temuan / Keluhan</label>
+
+      <textarea id="fieldFinding"
+        placeholder="Tuliskan hasil pemeriksaan atau keluhan pengguna alat"></textarea>
+
+      <label>Foto Evidence</label>
+
+      <input id="fieldPhoto"
+        type="file"
+        accept="image/*"
+        capture="environment">
+
+      <div class="actions">
+
+        <button class="primary"
+          onclick="submitFieldReport()">
+          Kirim Laporan
+        </button>
+
+      </div>
+
+      <div id="fieldResult"></div>
+
+    </div>
+
+  </section>
+
+
+  <!-- REPORTS -->
+  <section id="reports" class="section">
+
+    <h1 class="page-title">
+      Laporan
+    </h1>
+
+    <p class="page-desc">
+      Ringkasan aktivitas dan temuan alat medis.
+    </p>
+
+    <div class="card">
+
+      <h3>Konsep Real-Time Reporting</h3>
+
+      <div class="notice green">
+        Petugas lapangan mengirim laporan dari HP.
+        Data masuk ke server dan dapat digunakan
+        sebagai dasar monitoring Penanggung Jawab
+        dan Direksi.
+      </div>
+
+      <div class="notice blue">
+        Setiap laporan idealnya menyimpan:
+        identitas alat, petugas, waktu server,
+        kondisi, temuan, dan evidence.
+      </div>
+
+    </div>
+
+  </section>
+
+</div>
+
+</div>
+
+
+<script>
+
+/* =========================
+   STATE
+========================= */
+
+let currentUser = null;
+
+
+/* =========================
+   LOGIN
+========================= */
+
+function login(){
+
+  const username =
+    document.getElementById("username").value.trim();
+
+  const password =
+    document.getElementById("password").value;
+
+  const error =
+    document.getElementById("loginError");
+
+  const users = {
+
+    direksi:{
+      password:"calibra123",
+      name:"Direksi",
+      role:"DIREKSI"
+    },
+
+    pj:{
+      password:"calibra123",
+      name:"Penanggung Jawab",
+      role:"PENANGGUNG JAWAB"
+    },
+
+    petugas:{
+      password:"calibra123",
+      name:"Petugas Lapangan",
+      role:"PETUGAS LAPANGAN"
+    }
+
+  };
+
+  if(
+    users[username] &&
+    users[username].password === password
+  ){
+
+    currentUser = {
+      username:username,
+      name:users[username].name,
+      role:users[username].role
+    };
+
+    localStorage.setItem(
+      "calibraUser",
+      JSON.stringify(currentUser)
+    );
+
+    error.textContent = "";
+
+    showApp();
+
+  }else{
+
+    error.textContent =
+      "Username atau password salah.";
+
+  }
+
+}
+
+
+/* =========================
+   SHOW APP
+========================= */
+
+function showApp(){
+
+  document
+    .getElementById("loginPage")
+    .classList.add("hidden");
+
+  document
+    .getElementById("app")
+    .classList.remove("hidden");
+
+  document
+    .getElementById("currentUser")
+    .textContent =
+      currentUser.name;
+
+  document
+    .getElementById("currentRole")
+    .textContent =
+      currentUser.role;
+
+  loadDashboard();
+
+}
+
+
+/* =========================
+   LOGOUT
+========================= */
+
+function logout(){
+
+  localStorage.removeItem("calibraUser");
+
+  currentUser = null;
+
+  document
+    .getElementById("app")
+    .classList.add("hidden");
+
+  document
+    .getElementById("loginPage")
+    .classList.remove("hidden");
+
+}
+
+
+/* =========================
+   NAVIGATION
+========================= */
+
+function showSection(id,button){
+
+  document
+    .querySelectorAll(".section")
+    .forEach(section=>{
+      section.classList.remove("active");
+    });
+
+  document
+    .getElementById(id)
+    .classList.add("active");
+
+  document
+    .querySelectorAll(".nav button")
+    .forEach(btn=>{
+      btn.classList.remove("active");
+    });
+
+  if(button){
+    button.classList.add("active");
+  }
+
+  if(id === "dashboard"){
+    loadDashboard();
+  }
+
+  if(id === "equipment"){
+    loadEquipment();
+  }
+
+}
+
+
+/* =========================
+   HEALTH
+========================= */
+
+async function checkHealth(){
+
+  const el =
+    document.getElementById("serverStatus");
+
+  try{
+
+    const response =
+      await fetch("/api/health");
+
+    const data =
+      await response.json();
+
+    if(data.ok){
+
+      el.textContent = "ONLINE";
+      el.style.color = "#087443";
+
+    }else{
+
+      el.textContent = "ERROR";
+
+    }
+
+  }catch(error){
+
+    el.textContent = "OFFLINE";
+    el.style.color = "#b42318";
+
+  }
+
+}
+
+
+/* =========================
+   DASHBOARD
+========================= */
+
+async function loadDashboard(){
+
+  checkHealth();
+
+  try{
+
+    const response =
+      await fetch("/api/dashboard");
+
+    if(!response.ok){
+      throw new Error("Dashboard API error");
+    }
+
+    const data =
+      await response.json();
+
+    document
+      .getElementById("statEquipment")
+      .textContent =
+      data.equipment ?? 0;
+
+    document
+      .getElementById("statValid")
+      .textContent =
+      data.valid ?? 0;
+
+    document
+      .getElementById("statNearDue")
+      .textContent =
+      data.nearDue ?? 0;
+
+    document
+      .getElementById("statExpired")
+      .textContent =
+      data.expired ?? 0;
+
+    document
+      .getElementById("statFindings")
+      .textContent =
+      data.openFindings ?? 0;
+
+    renderRecent(data.recent || []);
+
+  }catch(error){
+
+    document
+      .getElementById("recentActivity")
+      .innerHTML =
+      '<div class="notice orange">Dashboard API belum dapat mengambil data.</div>';
+
+  }
+
+}
+
+
+/* =========================
+   RECENT
+========================= */
+
+function renderRecent(items){
+
+  const container =
+    document.getElementById("recentActivity");
+
+  if(!items.length){
+
+    container.innerHTML =
+      "Belum ada aktivitas.";
+
+    return;
+
+  }
+
+  let html = "";
+
+  items.forEach(item=>{
+
+    html += `
+      <div style="padding:12px 0;border-bottom:1px solid #edf0f4">
+
+        <b>${escapeHtml(item.equipment || "-")}</b>
+
+        <div style="color:#718096;margin-top:4px">
+          ${escapeHtml(item.code || "-")}
+        </div>
+
+        <div style="margin-top:5px">
+          ${escapeHtml(item.finding || "-")}
+        </div>
+
+        <small style="color:#98a2b3">
+          ${escapeHtml(item.status || "")}
+          ·
+          ${formatDate(item.time)}
+        </small>
+
+      </div>
+    `;
+
+  });
+
+  container.innerHTML = html;
+
+}
+
+
+/* =========================
+   EQUIPMENT
+========================= */
+
+async function loadEquipment(){
+
+  const tbody =
+    document.getElementById("equipmentTable");
+
+  tbody.innerHTML =
+    '<tr><td colspan="7">Memuat data...</td></tr>';
+
+  try{
+
+    const response =
+      await fetch("/api/equipment");
+
+    if(!response.ok){
+      throw new Error("Equipment API error");
+    }
+
+    const data =
+      await response.json();
+
+    const items =
+      Array.isArray(data)
+      ? data
+      : (data.equipment || data.items || []);
+
+    if(!items.length){
+
+      tbody.innerHTML =
+        '<tr><td colspan="7">Belum ada data alat.</td></tr>';
+
+      return;
+
+    }
+
+    tbody.innerHTML = "";
+
+    items.forEach(item=>{
+
+      const status =
+        item.status ||
+        item.calibration_status ||
+        "-";
+
+      let badgeClass = "";
+
+      if(
+        String(status).toUpperCase().includes("VALID") ||
+        String(status).toUpperCase().includes("OK")
+      ){
+        badgeClass = "ok";
+      }
+
+      if(
+        String(status).toUpperCase().includes("DUE") ||
+        String(status).toUpperCase().includes("PERHATIAN")
+      ){
+        badgeClass = "warning";
+      }
+
+      if(
+        String(status).toUpperCase().includes("EXPIRED") ||
+        String(status).toUpperCase().includes("EXPIRED")
+      ){
+        badgeClass = "danger";
+      }
+
+      tbody.innerHTML += `
+
+        <tr>
+
+          <td>
+            ${escapeHtml(
+              item.asset_code ||
+              item.code ||
+              item.kode_aset ||
+              "-"
+            )}
+          </td>
+
+          <td>
+            ${escapeHtml(
+              item.name ||
+              item.equipment_name ||
+              item.nama_alat ||
+              "-"
+            )}
+          </td>
+
+          <td>
+            ${escapeHtml(item.brand || item.merk || "-")}
+          </td>
+
+          <td>
+            ${escapeHtml(item.model || "-")}
+          </td>
+
+          <td>
+            ${escapeHtml(
+              item.serial_number ||
+              item.nomor_seri ||
+              "-"
+            )}
+          </td>
+
+          <td>
+            ${escapeHtml(
+              item.room ||
+              item.ruangan ||
+              "-"
+            )}
+          </td>
+
+          <td>
+            <span class="badge ${badgeClass}">
+              ${escapeHtml(status)}
+            </span>
+          </td>
+
+        </tr>
+
+      `;
+
+    });
+
+  }catch(error){
+
+    tbody.innerHTML =
+      '<tr><td colspan="7">Gaga l mengambil data alat.</td></tr>';
+  }
+
+}
+
+
+/* =========================
+   EXCEL PREVIEW
+========================= */
+
+async function previewExcel(){
+
+  const fileInput =
+    document.getElementById("excelFile");
+
+  const result =
+    document.getElementById("importResult");
+
+  if(!fileInput.files.length){
+
+    result.innerHTML =
+      '<div class="notice orange">Pilih file Excel terlebih dahulu.</div>';
+
+    return;
+
+  }
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "file",
+    fileInput.files[0]
+  );
+
+  result.innerHTML =
+    '<div class="notice blue">Memproses Excel...</div>';
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/import-excel/preview",
+        {
+          method:"POST",
+          body:formData
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if(!response.ok){
+      throw new Error(
+        data.error || "Preview gagal"
+      );
+    }
+
+    window.lastImportPreview = data;
+
+    const rows =
+      data.rows ||
+      data.preview ||
+      [];
+
+    let html = `
+      <div class="notice green">
+        <b>Preview berhasil.</b><br>
+        Data siap diperiksa sebelum import.
+      </div>
+    `;
+
+    if(rows.length){
+
+      html += `
+        <div class="table-wrap">
+        <table>
+        <thead>
+        <tr>
+          <th>Kode</th>
+          <th>Nama Alat</th>
+          <th>Merk</th>
+          <th>Ruangan</th>
+        </tr>
+        </thead>
+        <tbody>
+      `;
+
+      rows.slice(0,20).forEach(row=>{
+
+        html += `
+          <tr>
+            <td>${escapeHtml(
+              row.asset_code ||
+              row.code ||
+              row.kode_aset ||
+              "-"
+            )}</td>
+
+            <td>${escapeHtml(
+              row.name ||
+              row.equipment_name ||
+              row.nama_alat ||
+              "-"
+            )}</td>
+
+            <td>${escapeHtml(
+              row.brand ||
+              row.merk ||
+              "-"
+            )}</td>
+
+            <td>${escapeHtml(
+              row.room ||
+              row.ruangan ||
+              "-"
+            )}</td>
+          </tr>
+        `;
+
+      });
+
+      html += `
+        </tbody>
+        </table>
+        </div>
+      `;
+
+    }
+
+    html += `
+      <div class="actions">
+        <button class="primary"
+          onclick="confirmImport()">
+          Konfirmasi Import
+        </button>
+      </div>
+    `;
+
+    result.innerHTML = html;
+
+  }catch(error){
+
+    result.innerHTML =
+      `<div class="notice orange">
+        Preview gagal: ${escapeHtml(error.message)}
+      </div>`;
+
+  }
+
+}
+
+
+/* =========================
+   EXCEL CONFIRM
+========================= */
+
+async function confirmImport(){
+
+  const fileInput =
+    document.getElementById("excelFile");
+
+  const result =
+    document.getElementById("importResult");
+
+  if(!fileInput.files.length){
+    return;
+  }
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "file",
+    fileInput.files[0]
+  );
+
+  result.innerHTML =
+    '<div class="notice blue">Mengimpor data...</div>';
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/import-excel/confirm",
+        {
+          method:"POST",
+          body:formData
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if(!response.ok){
+      throw new Error(
+        data.error || "Import gagal"
+      );
+    }
+
+    result.innerHTML = `
+      <div class="notice green">
+        <b>Import berhasil.</b><br>
+        ${escapeHtml(
+          JSON.stringify(data)
+        )}
+      </div>
+    `;
+
+    loadDashboard();
+
+  }catch(error){
+
+    result.innerHTML =
+      `<div class="notice orange">
+        Import gagal: ${escapeHtml(error.message)}
+      </div>`;
+
+  }
+
+}
+
+
+/* =========================
+   QR
+========================= */
+
+async function getEquipmentQR(){
+
+  const code =
+    document
+      .getElementById("qrEquipmentId")
+      .value
+      .trim();
+
+  const result =
+    document.getElementById("qrResult");
+
+  if(!code){
+
+    result.innerHTML =
+      '<div class="notice orange">Masukkan kode alat.</div>';
+
+    return;
+
+  }
+
+  result.innerHTML =
+    '<div class="notice blue">Mencari identitas alat...</div>';
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/equipment/" +
+        encodeURIComponent(code) +
+        "/qr"
+      );
+
+    const data =
+      await response.json();
+
+    if(!response.ok){
+      throw new Error(
+        data.error || "QR tidak ditemukan"
+      );
+    }
+
+    let image = "";
+
+    if(data.qr){
+      image =
+        `<img src="${data.qr}"
+          style="max-width:260px;width:100%">`;
+    }
+
+    result.innerHTML = `
+
+      <div class="notice green">
+        <b>Identitas QR ditemukan.</b>
+      </div>
+
+      ${image}
+
+      <div style="margin-top:12px">
+        <b>${escapeHtml(
+          data.code || code
+        )}</b>
+      </div>
+
+    `;
+
+  }catch(error){
+
+    result.innerHTML =
+      `<div class="notice orange">
+        ${escapeHtml(error.message)}
+      </div>`;
+
+  }
+
+}
+
+
+/* =========================
+   FIELD REPORT
+========================= */
+
+async function submitFieldReport(){
+
+  const code =
+    document
+      .getElementById("fieldCode")
+      .value
+      .trim();
+
+  const condition =
+    document
+      .getElementById("fieldCondition")
+      .value;
+
+  const finding =
+    document
+      .getElementById("fieldFinding")
+      .value
+      .trim();
+
+  const result =
+    document
+      .getElementById("fieldResult");
+
+  if(!code){
+
+    result.innerHTML =
+      '<div class="notice orange">Masukkan kode alat terlebih dahulu.</div>';
+
+    return;
+
+  }
+
+  const report = {
+
+    equipment:code,
+
+    condition:condition,
+
+    finding:finding,
+
+    officer:
+      currentUser
+      ? currentUser.username
+      : "petugas",
+
+    time:
+      new Date().toISOString()
+
+  };
+
+  const reports =
+    JSON.parse(
+      localStorage.getItem(
+        "calibraFieldReports"
+      ) || "[]"
+    );
+
+  reports.unshift(report);
+
+  localStorage.setItem(
+    "calibraFieldReports",
+    JSON.stringify(reports)
+  );
+
+  result.innerHTML = `
+
+    <div class="notice green">
+
+      <b>Laporan berhasil dibuat.</b><br><br>
+
+      Alat:
+      ${escapeHtml(code)}<br>
+
+      Kondisi:
+      ${escapeHtml(condition)}<br>
+
+      Petugas:
+      ${escapeHtml(report.officer)}<br>
+
+      Waktu:
+      ${formatDate(report.time)}
+
+    </div>
+
+  `;
+
+}
+
+
+/* =========================
+   HELPERS
+========================= */
+
+function escapeHtml(value){
+
+  return String(value ?? "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+
+}
+
+
+function formatDate(value){
+
+  if(!value){
+    return "-";
+  }
+
+  try{
+
+    return new Date(value)
+      .toLocaleString("id-ID");
+
+  }catch(error){
+
+    return String(value);
+
+  }
+
+}
+
+
+/* =========================
+   RESTORE LOGIN
+========================= */
+
+(function(){
+
+  const saved =
+    localStorage.getItem(
+      "calibraUser"
+    );
+
+  if(saved){
+
+    try{
+
+      currentUser =
+        JSON.parse(saved);
+
+      showApp();
+
+    }catch(error){
+
+      localStorage.removeItem(
+        "calibraUser"
+      );
+
+    }
+
+  }
+
+})();
+
+</script>
+
+</body>
+</html>
