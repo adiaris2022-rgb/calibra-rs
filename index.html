@@ -1585,20 +1585,57 @@ async function submitFieldReport(){
       new Date().toISOString()
 
   };
-
-  const reports =
-    JSON.parse(
-      localStorage.getItem(
-        "calibraFieldReports"
-      ) || "[]"
-    );
-
-  reports.unshift(report);
-
-  localStorage.setItem(
-    "calibraFieldReports",
-    JSON.stringify(reports)
+try{
+  const equipmentResponse = await fetch(
+    "/api/equipment/" +
+    encodeURIComponent(code) +
+    "/qr"
   );
+
+  const equipmentData = await equipmentResponse.json();
+
+  if(!equipmentResponse.ok || !equipmentData.ok){
+    throw new Error(
+      equipmentData.error || "Alat tidak ditemukan."
+    );
+  }
+
+  const saveResponse = await fetch(
+    "/api/field-report",
+    {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        equipmentId:equipmentData.id,
+        report:
+          "Kondisi: " +
+          condition +
+          "\nTemuan: " +
+          finding
+      })
+    }
+  );
+
+  const saveData = await saveResponse.json();
+
+  if(!saveResponse.ok || !saveData.ok){
+    throw new Error(
+      saveData.error || "Laporan gagal disimpan."
+    );
+  }
+
+}catch(error){
+
+  result.innerHTML =
+    `<div class="notice orange">${
+      escapeHtml(error.message)
+    }</div>`;
+
+  return;
+                       }
+  
 
   result.innerHTML = `
 
