@@ -642,7 +642,6 @@ app.post("/api/field-report", async (req, res) => {
   }
 });
 
-*/
 /* GET LAPORAN PETUGAS */
 app.get("/api/field-reports", async (req, res) => {
   if (!needDb(res)) return;
