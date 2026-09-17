@@ -642,8 +642,41 @@ app.post("/api/field-report", async (req, res) => {
   }
 });
 
-/*
-  PENTING:
+*/
+/* GET LAPORAN PETUGAS */
+app.get("/api/field-reports", async (req, res) => {
+  if (!needDb(res)) return;
+
+  try {
+    const result = await pool.query(`
+      SELECT
+        fr.id,
+        fr.equipment_id,
+        e.asset_code,
+        e.name AS equipment_name,
+        fr.report,
+        fr.created_at
+      FROM field_reports fr
+      LEFT JOIN equipment e
+        ON e.id = fr.equipment_id
+      ORDER BY fr.created_at DESC
+      LIMIT 100
+    `);
+
+    res.json({
+      ok: true,
+      total: result.rows.length,
+      reports: result.rows,
+      serverTime: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+  /* PENTING:
   Server LISTEN DULU.
   PostgreSQL menyusul di background.
   Ini memperbaiki Railway Healthcheck.
