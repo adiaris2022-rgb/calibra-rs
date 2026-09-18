@@ -177,6 +177,11 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   `);
 
   await pool.query(`
+    ALTER TABLE evidence_files
+    ADD COLUMN IF NOT EXISTS evidence_type TEXT DEFAULT 'ORIGINAL'
+  `);
+
+  await pool.query(`
     INSERT INTO hospitals (code, name)
     VALUES ('RS-DEMO', 'Rumah Sakit Demo')
     ON CONFLICT (code) DO NOTHING
@@ -686,6 +691,7 @@ app.post(
         INSERT INTO evidence_files (
           equipment_id,
           report_id,
+          evidence_type,
           original_name,
           mime_type,
           file_size,
@@ -748,7 +754,8 @@ app.get("/api/evidence/:id", async (req, res) => {
       SELECT
         mime_type,
         file_size,
-        file_data
+        file_data,
+        evidence_type
       FROM evidence_files
       WHERE id = $1
       LIMIT 1
