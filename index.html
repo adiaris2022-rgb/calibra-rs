@@ -1847,11 +1847,34 @@ async function loadWorkOrders(){
     if(!data.actions.length){box.innerHTML='<div class="notice green">Belum ada Work Order.</div>';return;}
     box.innerHTML=data.actions.map(function(a){
       const timeline=Array.isArray(a.timeline)?a.timeline:[];
-      const timelineHtml=timeline.length
+      // Satu status cukup ditampilkan sekali. Jika status yang sama ditag beberapa kali,
+      // tampilkan timestamp terbaru; seluruh riwayat tetap tersimpan di database.
+      const uniqueTimeline=[];
+      const timelineMap={};
+      timeline.forEach(function(t){
+        const key=String(t.to_status||"");
+        if(!timelineMap[key]){
+          timelineMap[key]=t;
+          uniqueTimeline.push(t);
+        }else{
+          const oldTime=new Date(timelineMap[key].changed_at||0).getTime();
+          const newTime=new Date(t.changed_at||0).getTime();
+          if(newTime>=oldTime) timelineMap[key]=t;
+        }
+      });
+      const displayTimeline=uniqueTimeline.map(function(t){return timelineMap[String(t.to_status||"")];});
+      displayTimeline.sort(function(x,y){
+        const order=["NEW","ACKNOWLEDGED","IN PROGRESS","FIXED","VERIFIED","CLOSED"];
+        const xi=order.indexOf(x.to_status);
+        const yi=order.indexOf(y.to_status);
+        return (xi<0?999:xi)-(yi<0?999:yi);
+      });
+
+      const timelineHtml=displayTimeline.length
         ? '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;">'+
           '<b>Timeline Real-Time</b>'+
           '<div style="margin-top:8px;">'+
-          timeline.map(function(t){
+          displayTimeline.map(function(t){
             return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">'+
               '<div><b>'+escapeHtml(t.to_status)+'</b></div>'+
               '<div style="font-size:12px;color:#64748b;">'+formatDate(t.changed_at)+
