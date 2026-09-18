@@ -454,6 +454,12 @@ th{
       Laporan
     </button>
 
+    <button id="workOrderNav"
+      style="display:none;"
+      onclick="showSection('workorders',this)">
+      Work Order
+    </button>
+
   </div>
 
 
@@ -813,6 +819,15 @@ th{
 
   </section>
 
+  <!-- WORK ORDERS / PJ ONLY -->
+  <section id="workorders" class="section">
+    <h1 class="page-title">Work Order</h1>
+    <p class="page-desc">Kelola tindakan dari temuan lapangan dan pantau penyelesaiannya.</p>
+    <div class="notice blue"><b>PJ / Penanggung Jawab</b><br>Buat tindakan dari laporan, assign PIC, lalu pantau status sampai VERIFIED dan CLOSED.</div>
+    <div id="workOrderList"></div>
+  </section>
+
+
 </div>
 
 </div>
@@ -918,6 +933,11 @@ function showApp(){
     .textContent =
       currentUser.role;
 
+  const workOrderNav = document.getElementById("workOrderNav");
+  if(workOrderNav){
+    workOrderNav.style.display = currentUser.username === "pj" ? "" : "none";
+  }
+
   loadDashboard();
 
 }
@@ -980,6 +1000,11 @@ function showSection(id,button){
 
   if(id === "reports"){
   loadLiveReports();
+  }
+
+  if(id === "workorders"){
+    if(!currentUser || currentUser.username !== "pj") return;
+    loadWorkOrders();
   }
 }
 
@@ -1790,7 +1815,30 @@ async function loadLiveReports(){
 
 }
 
-  function openActionForm(reportId,equipmentId,button){
+  async function loadWorkOrders(){
+  const box=document.getElementById("workOrderList");
+  if(!box)return;
+  box.innerHTML='<div class="notice blue">Memuat Work Order...</div>';
+  try{
+    const response=await fetch("/api/actions/all",{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Gagal mengambil Work Order.");
+    if(!data.actions.length){box.innerHTML='<div class="notice green">Belum ada Work Order.</div>';return;}
+    box.innerHTML=data.actions.map(function(a){
+      return '<div class="card" style="margin-bottom:12px;border-left:4px solid #2563eb;">'+
+        '<strong>'+escapeHtml(a.asset_code||"-")+' — '+escapeHtml(a.equipment_name||"-")+'</strong>'+
+        '<div style="margin-top:8px;"><b>'+escapeHtml(a.title)+'</b></div>'+
+        '<div style="margin-top:6px;color:#64748b;">'+escapeHtml(a.description||"-")+'</div>'+
+        '<div style="margin-top:8px;">PIC: <b>'+escapeHtml(a.assigned_to||"-")+'</b></div>'+
+        '<div style="margin-top:8px;">Status: <b>'+escapeHtml(a.status)+'</b></div>'+
+        '<select style="margin-top:10px;padding:8px;" onchange="updateAction('+Number(a.id)+',this.value)">'+
+          ["NEW","ACKNOWLEDGED","IN PROGRESS","FIXED","VERIFIED","CLOSED"].map(function(s){return '<option '+(s===a.status?'selected':'')+'>'+s+'</option>';}).join("")+
+        '</select></div>';
+    }).join("");
+  }catch(error){box.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
+}
+
+function openActionForm(reportId,equipmentId,button){
   const box=document.getElementById("action-form-"+reportId);
   if(!box)return;
   if(box.innerHTML){box.innerHTML="";return;}
