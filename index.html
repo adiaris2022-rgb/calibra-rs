@@ -1775,310 +1775,89 @@ async function loadLiveReports(){
 
 }
 
-  async function submitFieldReport(){
+  async function getCurrentLocation(){
+  return new Promise(function(resolve){
+    if(!navigator.geolocation){ resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(function(position){
+      resolve({latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy:position.coords.accuracy});
+    },function(){resolve(null);},{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+  });
+}
 
-  const code =
-    document
-      .getElementById("fieldCode")
-      .value
-      .trim();
+async function createStampedEvidence(photo,metadata){
+  return new Promise(function(resolve,reject){
+    const image=new Image();
+    const objectUrl=URL.createObjectURL(photo);
+    image.onload=function(){
+      try{
+        const canvas=document.createElement("canvas");
+        canvas.width=image.naturalWidth; canvas.height=image.naturalHeight;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(image,0,0,canvas.width,canvas.height);
+        const scale=Math.max(1,canvas.width/1200);
+        const padding=Math.round(24*scale), line=Math.round(36*scale);
+        const panelHeight=Math.round(7*line+padding*2), panelY=canvas.height-panelHeight;
+        ctx.fillStyle="rgba(0,0,0,0.72)"; ctx.fillRect(0,panelY,canvas.width,panelHeight);
+        ctx.fillStyle="#ffffff"; ctx.font="700 "+Math.round(28*scale)+"px Arial";
+        ctx.fillText("CALIBRA RS • EVIDENCE",padding,panelY+padding+line);
+        ctx.font="600 "+Math.round(20*scale)+"px Arial";
+        const locationText=metadata.location ? "GPS: "+metadata.location.latitude.toFixed(6)+", "+metadata.location.longitude.toFixed(6)+" (±"+Math.round(metadata.location.accuracy||0)+"m)" : "GPS: Lokasi tidak tersedia";
+        const lines=["Tanggal/Waktu: "+metadata.dateTime,"Alat: "+metadata.assetCode+" — "+metadata.equipmentName,"Petugas: "+metadata.officer,"Kondisi: "+metadata.condition,locationText];
+        lines.forEach(function(lineText,index){ctx.fillText(lineText,padding,panelY+padding+line*(index+2));});
+        canvas.toBlob(function(blob){
+          URL.revokeObjectURL(objectUrl);
+          if(!blob){reject(new Error("Gagal membuat foto evidence bertimestamp."));return;}
+          resolve(new File([blob],"CALIBRA-"+metadata.assetCode+"-"+metadata.reportId+"-STAMPED.jpg",{type:"image/jpeg",lastModified:Date.now()}));
+        },"image/jpeg",0.9);
+      }catch(error){URL.revokeObjectURL(objectUrl);reject(error);}
+    };
+    image.onerror=function(){URL.revokeObjectURL(objectUrl);reject(new Error("Foto tidak dapat diproses."));};
+    image.src=objectUrl;
+  });
+}
 
-  const condition =
-    document
-      .getElementById("fieldCondition")
-      .value;
-
-  const finding =
-    document
-      .getElementById("fieldFinding")
-      .value
-      .trim();
-
-  const photoInput =
-    document.getElementById("fieldPhoto");
-
-  const result =
-    document.getElementById("fieldResult");
-
-  if(!code){
-
-    result.innerHTML =
-      '<div class="notice orange">' +
-      'Masukkan kode alat terlebih dahulu.' +
-      '</div>';
-
-    return;
-  }
-
-  if(!finding){
-
-    result.innerHTML =
-      '<div class="notice orange">' +
-      'Masukkan temuan / keluhan terlebih dahulu.' +
-      '</div>';
-
-    return;
-  }
-
-  if(
-    !photoInput ||
-    !photoInput.files ||
-    !photoInput.files.length
-  ){
-
-    result.innerHTML =
-      '<div class="notice orange">' +
-      'Foto evidence wajib diambil / dipilih.' +
-      '</div>';
-
-    return;
-  }
-
-  const photo =
-    photoInput.files[0];
-
-  const report = {
-
-    equipment: code,
-
-    condition: condition,
-
-    finding: finding,
-
-    officer:
-      currentUser
-      ? currentUser.username
-      : "petugas",
-
-    time:
-      new Date().toISOString()
-
-  };
-
+async function submitFieldReport(){
+  const code=document.getElementById("fieldCode").value.trim();
+  const condition=document.getElementById("fieldCondition").value;
+  const finding=document.getElementById("fieldFinding").value.trim();
+  const photoInput=document.getElementById("fieldPhoto");
+  const result=document.getElementById("fieldResult");
+  if(!code){result.innerHTML='<div class="notice orange">Masukkan kode alat terlebih dahulu.</div>';return;}
+  if(!finding){result.innerHTML='<div class="notice orange">Masukkan temuan / keluhan terlebih dahulu.</div>';return;}
+  if(!photoInput||!photoInput.files||!photoInput.files.length){result.innerHTML='<div class="notice orange">Foto evidence wajib diambil / dipilih.</div>';return;}
+  const photo=photoInput.files[0];
   try{
-
-    result.innerHTML =
-      '<div class="notice blue">' +
-      'Memeriksa alat...' +
-      '</div>';
-
-    /* =========================
-       1. CARI ALAT
-    ========================= */
-
-    const equipmentResponse =
-      await fetch(
-        "/api/equipment/" +
-        encodeURIComponent(code) +
-        "/qr"
-      );
-
-    const equipmentData =
-      await equipmentResponse.json();
-
-    if(
-      !equipmentResponse.ok ||
-      !equipmentData.ok
-    ){
-
-      throw new Error(
-        equipmentData.error ||
-        "Alat tidak ditemukan."
-      );
-
-    }
-
-    /* =========================
-       2. SIMPAN LAPORAN
-    ========================= */
-
-    result.innerHTML =
-      '<div class="notice blue">' +
-      'Menyimpan laporan...' +
-      '</div>';
-
-    const saveResponse =
-      await fetch(
-        "/api/field-report",
-        {
-
-          method:"POST",
-
-          headers:{
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-
-              equipmentId:
-                equipmentData.id,
-
-              report:
-                "Kondisi: " +
-                condition +
-                "\nTemuan: " +
-                finding
-
-            })
-
-        }
-      );
-
-    const saveData =
-      await saveResponse.json();
-
-    if(
-      !saveResponse.ok ||
-      !saveData.ok
-    ){
-
-      throw new Error(
-        saveData.error ||
-        "Laporan gagal disimpan."
-      );
-
-    }
-
-    const reportId =
-      saveData.report &&
-      saveData.report.id;
-
-    if(!reportId){
-
-      throw new Error(
-        "ID laporan tidak diterima dari server."
-      );
-
-    }
-
-    /* =========================
-       3. UPLOAD FOTO EVIDENCE
-    ========================= */
-
-    result.innerHTML =
-      '<div class="notice blue">' +
-      'Mengunggah foto evidence...' +
-      '</div>';
-
-    const formData =
-      new FormData();
-
-    formData.append(
-      "equipmentId",
-      String(equipmentData.id)
-    );
-
-    formData.append(
-      "reportId",
-      String(reportId)
-    );
-
-    formData.append(
-      "photo",
-      photo
-    );
-
-    const evidenceResponse =
-      await fetch(
-        "/api/evidence",
-        {
-
-          method:"POST",
-
-          body:formData
-
-        }
-      );
-
-    const evidenceData =
-      await evidenceResponse.json();
-
-    if(
-      !evidenceResponse.ok ||
-      !evidenceData.ok
-    ){
-
-      throw new Error(
-        evidenceData.error ||
-        "Foto evidence gagal diunggah."
-      );
-
-    }
-
-    /* =========================
-       4. SUKSES
-    ========================= */
-
-    result.innerHTML = `
-
-      <div class="notice green">
-
-        <b>
-          Laporan & evidence berhasil disimpan.
-        </b>
-
-        <br><br>
-
-        Alat:
-        ${escapeHtml(code)}
-
-        <br>
-
-        Kondisi:
-        ${escapeHtml(condition)}
-
-        <br>
-
-        Temuan:
-        ${escapeHtml(finding)}
-
-        <br>
-
-        Petugas:
-        ${escapeHtml(report.officer)}
-
-        <br>
-
-        Waktu:
-        ${formatDate(report.time)}
-
-        <br><br>
-
-        <b>
-          Foto evidence:
-        </b>
-        tersimpan di server.
-
-      </div>
-
-    `;
-
-    /* Refresh live report */
-
-    if(
-      typeof loadLiveReports === "function"
-    ){
-
-      loadLiveReports();
-
-    }
-
-  }catch(error){
-
-    result.innerHTML = `
-
-      <div class="notice red">
-
-        ${escapeHtml(error.message)}
-
-      </div>
-
-    `;
-
-    }
-
+    result.innerHTML='<div class="notice blue">Memeriksa alat...</div>';
+    const equipmentResponse=await fetch("/api/equipment/"+encodeURIComponent(code)+"/qr");
+    const equipmentData=await equipmentResponse.json();
+    if(!equipmentResponse.ok||!equipmentData.ok)throw new Error(equipmentData.error||"Alat tidak ditemukan.");
+    result.innerHTML='<div class="notice blue">Menyimpan laporan...</div>';
+    const saveResponse=await fetch("/api/field-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({equipmentId:equipmentData.id,report:"Kondisi: "+condition+"\nTemuan: "+finding})});
+    const saveData=await saveResponse.json();
+    if(!saveResponse.ok||!saveData.ok)throw new Error(saveData.error||"Laporan gagal disimpan.");
+    const reportId=saveData.report&&saveData.report.id;
+    if(!reportId)throw new Error("ID laporan tidak diterima dari server.");
+    const serverTime=saveData.serverTime||new Date().toISOString();
+    result.innerHTML='<div class="notice blue">Mengambil lokasi GPS...</div>';
+    const location=await getCurrentLocation();
+    const dateTime=formatDate(serverTime);
+    const originalForm=new FormData();
+    originalForm.append("equipmentId",String(equipmentData.id)); originalForm.append("reportId",String(reportId)); originalForm.append("evidenceType","ORIGINAL"); originalForm.append("photo",photo,photo.name);
+    result.innerHTML='<div class="notice blue">Menyimpan foto original...</div>';
+    const originalResponse=await fetch("/api/evidence",{method:"POST",body:originalForm});
+    const originalData=await originalResponse.json();
+    if(!originalResponse.ok||!originalData.ok)throw new Error(originalData.error||"Foto original gagal diunggah.");
+    result.innerHTML='<div class="notice blue">Membuat Evidence Stamp...</div>';
+    const stampedPhoto=await createStampedEvidence(photo,{reportId:reportId,assetCode:code,equipmentName:equipmentData.name||"Alat medis",officer:currentUser?currentUser.username:"petugas",condition:condition,dateTime:dateTime,location:location});
+    const stampedForm=new FormData();
+    stampedForm.append("equipmentId",String(equipmentData.id)); stampedForm.append("reportId",String(reportId)); stampedForm.append("evidenceType","STAMPED"); stampedForm.append("photo",stampedPhoto,stampedPhoto.name);
+    result.innerHTML='<div class="notice blue">Menyimpan foto stamped...</div>';
+    const stampedResponse=await fetch("/api/evidence",{method:"POST",body:stampedForm});
+    const stampedData=await stampedResponse.json();
+    if(!stampedResponse.ok||!stampedData.ok)throw new Error(stampedData.error||"Foto stamped gagal diunggah.");
+    result.innerHTML='<div class="notice green"><b>Laporan & evidence berhasil disimpan.</b><br><br>Alat: '+escapeHtml(code)+'<br>Kondisi: '+escapeHtml(condition)+'<br>Temuan: '+escapeHtml(finding)+'<br>Waktu server: '+escapeHtml(dateTime)+'<br>GPS: '+(location?escapeHtml(location.latitude.toFixed(6)+", "+location.longitude.toFixed(6)):"Tidak tersedia")+'<br><br><b>Evidence:</b> original + stamped tersimpan di server.</div>';
+    if(typeof loadLiveReports==="function")loadLiveReports();
+  }catch(error){result.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
 }
 async function viewEvidence(id){
 
