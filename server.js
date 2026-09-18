@@ -795,6 +795,35 @@ app.get("/api/evidence/:id", async (req, res) => {
   }
 
 });
+/* GET STAMPED EVIDENCE BY REPORT */
+app.get("/api/field-report/:id/stamped-evidence", async (req, res) => {
+  if (!needDb(res)) return;
+
+  const reportId = Number(req.params.id);
+  if (!reportId) {
+    return res.status(400).json({ ok: false, error: "ID laporan tidak valid." });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, mime_type, file_size, evidence_type, created_at
+       FROM evidence_files
+       WHERE report_id = $1 AND evidence_type = 'STAMPED'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [reportId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ ok: false, error: "Stamped evidence belum tersedia." });
+    }
+
+    res.json({ ok: true, evidence: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 /* GET LAPORAN PETUGAS */
 app.get("/api/field-report", async (req, res) => {
   if (!needDb(res)) return;
