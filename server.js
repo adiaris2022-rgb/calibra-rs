@@ -650,7 +650,83 @@ app.post("/api/field-report", async (req, res) => {
     });
   }
 });
+/* UPLOAD FOTO EVIDENCE */
 
+app.post(
+  "/api/evidence",
+  upload.single("photo"),
+  async (req, res) => {
+
+    if (!needDb(res)) return;
+
+    try {
+
+      const equipmentId =
+        Number(req.body.equipmentId);
+
+      const reportId =
+        Number(req.body.reportId);
+
+      if (!equipmentId || !reportId) {
+        return res.status(400).json({
+          ok: false,
+          error: "equipmentId dan reportId wajib diisi."
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          ok: false,
+          error: "Foto evidence wajib dipilih."
+        });
+      }
+
+      const result = await pool.query(
+        `
+        INSERT INTO evidence_files (
+          equipment_id,
+          report_id,
+          original_name,
+          mime_type,
+          file_size,
+          file_data
+        )
+        VALUES ($1,$2,$3,$4,$5,$6)
+        RETURNING
+          id,
+          equipment_id,
+          report_id,
+          original_name,
+          mime_type,
+          file_size,
+          created_at
+        `,
+        [
+          equipmentId,
+          reportId,
+          req.file.originalname,
+          req.file.mimetype,
+          req.file.size,
+          req.file.buffer
+        ]
+      );
+
+      res.json({
+        ok: true,
+        evidence: result.rows[0],
+        serverTime: new Date().toISOString()
+      });
+
+    } catch (error) {
+
+      res.status(500).json({
+        ok: false,
+        error: error.message
+      });
+
+    }
+  }
+);
 /* GET LAPORAN PETUGAS */
 app.get("/api/field-report", async (req, res) => {
   if (!needDb(res)) return;
