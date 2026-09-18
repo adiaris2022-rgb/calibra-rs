@@ -767,24 +767,49 @@ th{
       Ringkasan aktivitas dan temuan alat medis.
     </p>
 
-    <div class="card">
+  <div class="card">
 
-      <h3>Konsep Real-Time Reporting</h3>
+  <div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+  ">
 
-      <div class="notice green">
-        Petugas lapangan mengirim laporan dari HP.
-        Data masuk ke server dan dapat digunakan
-        sebagai dasar monitoring Penanggung Jawab
-        dan Direksi.
-      </div>
+    <div>
+      <h3 style="margin:0;">Live Report</h3>
 
-      <div class="notice blue">
-        Setiap laporan idealnya menyimpan:
-        identitas alat, petugas, waktu server,
-        kondisi, temuan, dan evidence.
-      </div>
-
+      <p style="
+        margin:6px 0 0;
+        color:#64748b;
+      ">
+        Laporan petugas yang masuk langsung dari server.
+      </p>
     </div>
+
+    <button
+      type="button"
+      onclick="loadLiveReports()"
+      class="btn">
+      ↻ Refresh
+    </button>
+
+  </div>
+
+  <div
+    id="liveReportStatus"
+    class="notice blue"
+    style="margin-top:18px;">
+    Mengambil laporan dari server...
+  </div>
+
+  <div
+    id="liveReports"
+    style="margin-top:18px;">
+  </div>
+
+  </div>
 
   </section>
 
@@ -953,6 +978,9 @@ function showSection(id,button){
     loadEquipment();
   }
 
+  if(id === "reports"){
+  loadLiveReports();
+  }
 }
 
 
@@ -1544,7 +1572,187 @@ async function getEquipmentQR(){
    FIELD REPORT
 ========================= */
 
-async function submitFieldReport(){
+async function loadLiveReports(){
+
+  const status =
+    document.getElementById("liveReportStatus");
+
+  const container =
+    document.getElementById("liveReports");
+
+  if(!status || !container){
+    return;
+  }
+
+  try{
+
+    status.className = "notice blue";
+    status.textContent =
+      "Mengambil laporan dari server...";
+
+    const response =
+      await fetch(
+        "/api/field-report",
+        {
+          cache:"no-store"
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if(
+      !response.ok ||
+      !data.ok
+    ){
+      throw new Error(
+        data.error ||
+        "Gagal mengambil laporan."
+      );
+    }
+
+    if(
+      !data.reports ||
+      !data.reports.length
+    ){
+
+      container.innerHTML =
+        '<div class="notice blue">' +
+        'Belum ada laporan masuk.' +
+        '</div>';
+
+    }else{
+
+      container.innerHTML =
+        data.reports.map(function(r){
+
+          const lines =
+            String(r.report || "")
+            .split("\n");
+
+          const conditionLine =
+            lines.find(function(x){
+              return x.startsWith("Kondisi:");
+            }) || "";
+
+          const findingLine =
+            lines.find(function(x){
+              return x.startsWith("Temuan:");
+            }) || "";
+
+          const condition =
+            conditionLine
+            .replace(/^Kondisi:\s*/,"");
+
+          const finding =
+            findingLine
+            .replace(/^Temuan:\s*/,"");
+
+          let border = "#16a34a";
+          let badge = "#dcfce7";
+
+          if(condition === "RUSAK"){
+            border = "#dc2626";
+            badge = "#fee2e2";
+          }
+
+          if(condition === "PERLU_PERHATIAN"){
+            border = "#d97706";
+            badge = "#fef3c7";
+          }
+
+          return `
+            <div
+              class="card"
+              style="
+                margin-bottom:12px;
+                border-left:4px solid ${border};
+              "
+            >
+
+              <div style="
+                display:flex;
+                justify-content:space-between;
+                gap:12px;
+                flex-wrap:wrap;
+              ">
+
+                <strong>
+                  ${escapeHtml(
+                    r.asset_code || "-"
+                  )}
+                  —
+                  ${escapeHtml(
+                    r.equipment_name || "-"
+                  )}
+                </strong>
+
+                <span style="
+                  background:${badge};
+                  padding:5px 9px;
+                  border-radius:999px;
+                  font-size:12px;
+                  font-weight:700;
+                ">
+                  ${escapeHtml(
+                    condition || "INFO"
+                  )}
+                </span>
+
+              </div>
+
+              <div style="
+                margin-top:10px;
+                color:#334155;
+              ">
+                ${escapeHtml(
+                  finding ||
+                  r.report ||
+                  "-"
+                )}
+              </div>
+
+              <div style="
+                margin-top:10px;
+                color:#64748b;
+                font-size:12px;
+              ">
+                Server:
+                ${formatDate(
+                  r.created_at
+                )}
+              </div>
+
+            </div>
+          `;
+
+        }).join("");
+
+    }
+
+    status.className =
+      "notice green";
+
+    status.textContent =
+      "Server aktif • " +
+      (data.total || 0) +
+      " laporan";
+
+  }catch(error){
+
+    status.className =
+      "notice red";
+
+    status.textContent =
+      error.message;
+
+    container.innerHTML = "";
+
+  }
+
+        }
+  
+  async function submitFieldReport(){
 
   const code =
     document
