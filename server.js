@@ -158,7 +158,16 @@ async function initDb() {
       status TEXT DEFAULT 'OPEN',
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
-
+CREATE TABLE IF NOT EXISTS evidence_files (
+  id SERIAL PRIMARY KEY,
+  equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
+  report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE,
+  original_name TEXT,
+  mime_type TEXT NOT NULL,
+  file_size INTEGER,
+  file_data BYTEA NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
     CREATE TABLE IF NOT EXISTS audit_logs (
       id SERIAL PRIMARY KEY,
       action TEXT NOT NULL,
