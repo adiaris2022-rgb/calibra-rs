@@ -7,7 +7,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static(__dirname));
+
+// Pastikan browser selalu mengambil frontend terbaru.
+app.use(express.static(__dirname, {
+  setHeaders: function(res, filePath) {
+    if (filePath.endsWith("index.html")) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    }
+  }
+}));
 
 const upload = multer({
   storage: multer.memoryStorage(),
