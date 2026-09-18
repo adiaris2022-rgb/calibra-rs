@@ -2057,7 +2057,52 @@ async function loadLiveReports(){
     }
 
 }
+async function viewEvidence(id){
 
+  if(!id){
+    return;
+  }
+
+  try{
+
+    const response =
+      await fetch(
+        "/api/evidence/" + id,
+        {
+          cache:"no-store"
+        }
+      );
+
+    if(!response.ok){
+      throw new Error(
+        "Evidence tidak dapat dibuka."
+      );
+    }
+
+    const blob =
+      await response.blob();
+
+    const url =
+      URL.createObjectURL(blob);
+
+    window.open(
+      url,
+      "_blank"
+    );
+
+    setTimeout(function(){
+      URL.revokeObjectURL(url);
+    }, 60000);
+
+  }catch(error){
+
+    alert(
+      error.message
+    );
+
+  }
+
+        }
 /* ========================
    HELPERS
 ======================== */
