@@ -1681,6 +1681,14 @@ async function loadLiveReports(){
                   Tidak ada evidence foto.
                 </div>
               `;
+          
+          const actionButton = `
+            <button type="button" class="btn" style="margin-top:12px;" onclick="openActionForm(${Number(r.id)},${Number(r.equipment_id)}, this)">
+              🔧 Buat Tindakan / Work Order
+            </button>
+            <div id="action-form-${Number(r.id)}" style="margin-top:10px;"></div>
+            <div id="action-list-${Number(r.id)}" style="margin-top:10px;"></div>
+          `;
 
           return `
             <div
@@ -1745,6 +1753,7 @@ async function loadLiveReports(){
               </div>
 
               ${evidenceButton}
+              ${actionButton}
 
             </div>
           `;
@@ -1775,7 +1784,58 @@ async function loadLiveReports(){
 
 }
 
-  async function getCurrentLocation(){
+  function openActionForm(reportId,equipmentId,button){
+  const box=document.getElementById("action-form-"+reportId);
+  if(!box)return;
+  if(box.innerHTML){box.innerHTML="";return;}
+  box.innerHTML=`
+    <div class="notice blue">
+      <b>Buat Tindakan</b><br>
+      <input id="action-title-${reportId}" placeholder="Contoh: Periksa sumber listrik / lakukan troubleshooting" style="margin-top:8px;width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;border-radius:8px;">
+      <textarea id="action-desc-${reportId}" placeholder="Catatan tindakan / instruksi" style="margin-top:8px;width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;border-radius:8px;"></textarea>
+      <input id="action-assignee-${reportId}" placeholder="PIC / teknisi" style="margin-top:8px;width:100%;box-sizing:border-box;padding:10px;border:1px solid #d0d5dd;border-radius:8px;">
+      <button type="button" class="primary" style="margin-top:8px;" onclick="saveAction(${reportId},${equipmentId})">Simpan Tindakan</button>
+    </div>
+  `;
+}
+
+async function saveAction(reportId,equipmentId){
+  const title=document.getElementById("action-title-"+reportId).value.trim();
+  const description=document.getElementById("action-desc-"+reportId).value.trim();
+  const assignedTo=document.getElementById("action-assignee-"+reportId).value.trim();
+  if(!title){alert("Judul tindakan wajib diisi.");return;}
+  try{
+    const response=await fetch("/api/actions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reportId:reportId,equipmentId:equipmentId,title:title,description:description,assignedTo:assignedTo,createdBy:currentUser?currentUser.username:""})});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Tindakan gagal disimpan.");
+    document.getElementById("action-form-"+reportId).innerHTML='<div class="notice green">Tindakan berhasil dibuat.</div>';
+    loadActions(reportId);
+  }catch(error){alert(error.message);}
+}
+
+async function loadActions(reportId){
+  const box=document.getElementById("action-list-"+reportId);
+  if(!box)return;
+  try{
+    const response=await fetch("/api/actions/"+reportId,{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Gagal mengambil tindakan.");
+    box.innerHTML=data.actions.map(function(a){
+      return \`<div class="notice" style="margin-top:8px;"><b>🔧 \${escapeHtml(a.title)}</b><br>PIC: \${escapeHtml(a.assigned_to||"-")}<br>Status: <b>\${escapeHtml(a.status)}</b><br><select onchange="updateAction(\${Number(a.id)},this.value)" style="margin-top:8px;padding:8px;"><option>NEW</option><option>ACKNOWLEDGED</option><option>IN PROGRESS</option><option>FIXED</option><option>VERIFIED</option><option>CLOSED</option></select></div>\`;
+    }).join("") || '<div style="color:#64748b;font-size:13px;">Belum ada tindakan.</div>';
+  }catch(error){box.innerHTML='<div class="notice orange">'+escapeHtml(error.message)+'</div>';}
+}
+
+async function updateAction(id,status){
+  try{
+    const response=await fetch("/api/actions/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:status})});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Status gagal diperbarui.");
+    loadLiveReports();
+  }catch(error){alert(error.message);}
+}
+
+async function getCurrentLocation(){
   return new Promise(function(resolve){
     if(!navigator.geolocation){ resolve(null); return; }
     navigator.geolocation.getCurrentPosition(function(position){
