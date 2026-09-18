@@ -710,6 +710,7 @@ app.post(
         [
           equipmentId,
           reportId,
+          clean(req.body.evidenceType || "ORIGINAL").toUpperCase(),
           req.file.originalname,
           req.file.mimetype,
           req.file.size,
@@ -815,7 +816,9 @@ LEFT JOIN LATERAL (
   SELECT id
   FROM evidence_files
   WHERE report_id = fr.id
-  ORDER BY created_at DESC
+  ORDER BY
+    CASE WHEN evidence_type = 'STAMPED' THEN 0 ELSE 1 END,
+    created_at DESC
   LIMIT 1
 ) ev ON true
       ORDER BY fr.created_at DESC
