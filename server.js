@@ -944,8 +944,17 @@ app.get("/api/actions/all", async (req, res) => {
               )
               ORDER BY h.changed_at ASC, h.id ASC
             )
-            FROM action_status_history h
-            WHERE h.action_id = a.id
+            FROM (
+              SELECT DISTINCT ON (to_status)
+                id,
+                from_status,
+                to_status,
+                changed_by,
+                changed_at
+              FROM action_status_history
+              WHERE action_id = a.id
+              ORDER BY to_status, changed_at DESC, id DESC
+            ) h
           ), '[]'::json) AS timeline
        FROM actions a
        LEFT JOIN equipment e ON e.id = a.equipment_id
