@@ -697,7 +697,7 @@ app.post(
           file_size,
           file_data
         )
-        VALUES ($1,$2,$3,$4,$5,$6)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
         RETURNING
           id,
           equipment_id,
