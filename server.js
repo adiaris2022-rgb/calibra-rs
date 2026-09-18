@@ -211,6 +211,33 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     )
   `);
 
+  // Seed satu Work Order demo agar alur PJ dapat langsung diuji.
+  await pool.query(`
+    INSERT INTO actions (
+      report_id,
+      equipment_id,
+      title,
+      description,
+      assigned_to,
+      status,
+      created_by
+    )
+    SELECT
+      fr.id,
+      fr.equipment_id,
+      'Pemeriksaan Patient Monitor',
+      'Periksa alarm dan lakukan troubleshooting.',
+      'Teknisi IPSRS',
+      'NEW',
+      'pj'
+    FROM field_reports fr
+    JOIN equipment e ON e.id = fr.equipment_id
+    WHERE e.asset_code = 'ICU-101'
+      AND NOT EXISTS (SELECT 1 FROM actions)
+    ORDER BY fr.created_at DESC
+    LIMIT 1
+  `);
+
 
   await pool.query(`
     INSERT INTO hospitals (code, name)
