@@ -1832,7 +1832,7 @@ async function submitFieldReport(){
     const equipmentData=await equipmentResponse.json();
     if(!equipmentResponse.ok||!equipmentData.ok)throw new Error(equipmentData.error||"Alat tidak ditemukan.");
     result.innerHTML='<div class="notice blue">Menyimpan laporan...</div>';
-    const saveResponse=await fetch("/api/field-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({equipmentId:equipmentData.id,report:"Kondisi: "+condition+"\nTemuan: "+finding})});
+    const saveResponse=await fetch("/api/field-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({equipmentId:equipmentData.id,report:"Kondisi: "+condition+"\nTemuan: "+finding,officerUsername:currentUser?currentUser.username:""})});
     const saveData=await saveResponse.json();
     if(!saveResponse.ok||!saveData.ok)throw new Error(saveData.error||"Laporan gagal disimpan.");
     const reportId=saveData.report&&saveData.report.id;
@@ -1848,7 +1848,7 @@ async function submitFieldReport(){
     const originalData=await originalResponse.json();
     if(!originalResponse.ok||!originalData.ok)throw new Error(originalData.error||"Foto original gagal diunggah.");
     result.innerHTML='<div class="notice blue">Membuat Evidence Stamp...</div>';
-    const stampedPhoto=await createStampedEvidence(photo,{reportId:reportId,assetCode:code,equipmentName:equipmentData.name||"Alat medis",officer:currentUser?currentUser.username:"petugas",condition:condition,dateTime:dateTime,location:location});
+    const stampedPhoto=await createStampedEvidence(photo,{reportId:reportId,assetCode:code,equipmentName:equipmentData.name||"Alat medis",officer:(saveData.report&&saveData.report.officer_username)|| (currentUser&&currentUser.username) || "petugas",condition:condition,dateTime:dateTime,location:location});
     const stampedForm=new FormData();
     stampedForm.append("equipmentId",String(equipmentData.id)); stampedForm.append("reportId",String(reportId)); stampedForm.append("evidenceType","STAMPED"); stampedForm.append("photo",stampedPhoto,stampedPhoto.name);
     result.innerHTML='<div class="notice blue">Menyimpan foto stamped...</div>';
