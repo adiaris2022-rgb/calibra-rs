@@ -211,6 +211,34 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS action_status_history (
+      id SERIAL PRIMARY KEY,
+      action_id INTEGER REFERENCES actions(id) ON DELETE CASCADE,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      changed_by TEXT,
+      changed_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Backfill the initial status event for existing Work Orders.
+  await pool.query(`
+    INSERT INTO action_status_history (
+      action_id, from_status, to_status, changed_by, changed_at
+    )
+    SELECT
+      a.id,
+      NULL,
+      a.status,
+      COALESCE(a.created_by, ''),
+      a.created_at
+    FROM actions a
+    WHERE NOT EXISTS (
+      SELECT 1 FROM action_status_history h WHERE h.action_id = a.id
+    )
+  `);
+
   // Seed satu Work Order demo agar alur PJ dapat langsung diuji.
   await pool.query(`
     INSERT INTO actions (
@@ -885,6 +913,12 @@ app.post("/api/actions", async (req, res) => {
         clean(req.body.createdBy || "")
       ]
     );
+    await pool.query(
+      `INSERT INTO action_status_history (
+        action_id, from_status, to_status, changed_by
+      ) VALUES ($1,$2,$3,$4)`,
+      [result.rows[0].id, null, result.rows[0].status, clean(req.body.createdBy || "")]
+    );
     res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -895,7 +929,24 @@ app.get("/api/actions/all", async (req, res) => {
   if (!needDb(res)) return;
   try {
     const result = await pool.query(
-      `SELECT a.*, e.asset_code, e.name AS equipment_name
+      `SELECT
+          a.*,
+          e.asset_code,
+          e.name AS equipment_name,
+          COALESCE((
+            SELECT json_agg(
+              json_build_object(
+                'id', h.id,
+                'from_status', h.from_status,
+                'to_status', h.to_status,
+                'changed_by', h.changed_by,
+                'changed_at', h.changed_at
+              )
+              ORDER BY h.changed_at ASC, h.id ASC
+            )
+            FROM action_status_history h
+            WHERE h.action_id = a.id
+          ), '[]'::json) AS timeline
        FROM actions a
        LEFT JOIN equipment e ON e.id = a.equipment_id
        ORDER BY a.created_at DESC
@@ -928,11 +979,34 @@ app.patch("/api/actions/:id", async (req, res) => {
     if (!allowed.includes(status)) {
       return res.status(400).json({ ok: false, error: "Status tindakan tidak valid." });
     }
+    const current = await pool.query(
+      `SELECT id, status, created_by FROM actions WHERE id = $1`,
+      [Number(req.params.id)]
+    );
+    if (!current.rows.length) return res.status(404).json({ ok: false, error: "Tindakan tidak ditemukan." });
+
+    const previousStatus = current.rows[0].status;
+    if (previousStatus === status) {
+      return res.json({
+        ok: true,
+        action: current.rows[0],
+        serverTime: new Date().toISOString()
+      });
+    }
+
     const result = await pool.query(
       `UPDATE actions SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
       [status, Number(req.params.id)]
     );
-    if (!result.rows.length) return res.status(404).json({ ok: false, error: "Tindakan tidak ditemukan." });
+
+    const changedBy = clean(req.body.changedBy || current.rows[0].created_by || "");
+    await pool.query(
+      `INSERT INTO action_status_history (
+        action_id, from_status, to_status, changed_by
+      ) VALUES ($1,$2,$3,$4)`,
+      [Number(req.params.id), previousStatus, status, changedBy]
+    );
+
     res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
