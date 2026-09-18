@@ -1903,7 +1903,8 @@ async function updateAction(id,status){
     const response=await fetch("/api/actions/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:status})});
     const data=await response.json();
     if(!response.ok||!data.ok)throw new Error(data.error||"Status gagal diperbarui.");
-    loadLiveReports();
+    if(typeof loadWorkOrders==="function") loadWorkOrders();
+    if(typeof loadLiveReports==="function") loadLiveReports();
   }catch(error){alert(error.message);}
 }
 
