@@ -726,7 +726,67 @@ app.post(
 
     }
   }
-);
+);/* LIHAT FOTO EVIDENCE */
+
+app.get("/api/evidence/:id", async (req, res) => {
+
+  if (!needDb(res)) return;
+
+  const id = Number(req.params.id);
+
+  if (!id) {
+    return res.status(400).json({
+      ok: false,
+      error: "ID evidence tidak valid."
+    });
+  }
+
+  try {
+
+    const result = await pool.query(
+      `
+      SELECT
+        mime_type,
+        file_size,
+        file_data
+      FROM evidence_files
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: "Evidence tidak ditemukan."
+      });
+    }
+
+    const evidence = result.rows[0];
+
+    res.setHeader(
+      "Content-Type",
+      evidence.mime_type
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      "inline"
+    );
+
+    res.send(evidence.file_data);
+
+  } catch (error) {
+
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+
+  }
+
+});
 /* GET LAPORAN PETUGAS */
 app.get("/api/field-report", async (req, res) => {
   if (!needDb(res)) return;
@@ -734,15 +794,23 @@ app.get("/api/field-report", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        fr.id,
-        fr.equipment_id,
-        e.asset_code,
-        e.name AS equipment_name,
-        fr.report,
-        fr.created_at
-      FROM field_reports fr
-      LEFT JOIN equipment e
-        ON e.id = fr.equipment_id
+  fr.id,
+  fr.equipment_id,
+  e.asset_code,
+  e.name AS equipment_name,
+  fr.report,
+  fr.created_at,
+  ev.id AS evidence_id
+FROM field_reports fr
+LEFT JOIN equipment e
+  ON e.id = fr.equipment_id
+LEFT JOIN LATERAL (
+  SELECT id
+  FROM evidence_files
+  WHERE report_id = fr.id
+  ORDER BY created_at DESC
+  LIMIT 1
+) ev ON true
       ORDER BY fr.created_at DESC
       LIMIT 100
     `);
