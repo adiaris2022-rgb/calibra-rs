@@ -864,6 +864,22 @@ app.post("/api/actions", async (req, res) => {
   }
 });
 
+app.get("/api/actions/all", async (req, res) => {
+  if (!needDb(res)) return;
+  try {
+    const result = await pool.query(
+      `SELECT a.*, e.asset_code, e.name AS equipment_name
+       FROM actions a
+       LEFT JOIN equipment e ON e.id = a.equipment_id
+       ORDER BY a.created_at DESC
+       LIMIT 200`
+    );
+    res.json({ ok: true, actions: result.rows });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/actions/:reportId", async (req, res) => {
   if (!needDb(res)) return;
   try {
