@@ -1642,11 +1642,11 @@ async function loadLiveReports(){
 
           const condition =
             conditionLine
-            .replace(/^Kondisi:\s*/,"");
+              .replace(/^Kondisi:\s*/,"");
 
           const finding =
             findingLine
-            .replace(/^Temuan:\s*/,"");
+              .replace(/^Temuan:\s*/,"");
 
           let border = "#16a34a";
           let badge = "#dcfce7";
@@ -1661,11 +1661,119 @@ async function loadLiveReports(){
             badge = "#fef3c7";
           }
 
+          const evidenceButton =
+            r.evidence_id
+              ? `
+                <button
+                  type="button"
+                  class="btn"
+                  style="margin-top:12px;"
+                  onclick="viewEvidence(${Number(r.evidence_id)})">
+                  📷 Lihat Evidence
+                </button>
+              `
+              : `
+                <div style="
+                  margin-top:12px;
+                  color:#94a3b8;
+                  font-size:13px;
+                ">
+                  Tidak ada evidence foto.
+                </div>
+              `;
+
           return `
             <div
               class="card"
               style="
                 margin-bottom:12px;
+                border-left:4px solid ${border};
+              "
+            >
+
+              <div style="
+                display:flex;
+                justify-content:space-between;
+                gap:12px;
+                flex-wrap:wrap;
+              ">
+
+                <strong>
+                  ${escapeHtml(
+                    r.asset_code || "-"
+                  )}
+                  —
+                  ${escapeHtml(
+                    r.equipment_name || "-"
+                  )}
+                </strong>
+
+                <span style="
+                  background:${badge};
+                  padding:5px 9px;
+                  border-radius:999px;
+                  font-size:12px;
+                  font-weight:700;
+                ">
+                  ${escapeHtml(
+                    condition || "INFO"
+                  )}
+                </span>
+
+              </div>
+
+              <div style="
+                margin-top:10px;
+                color:#334155;
+              ">
+                ${escapeHtml(
+                  finding ||
+                  r.report ||
+                  "-"
+                )}
+              </div>
+
+              <div style="
+                margin-top:10px;
+                color:#64748b;
+                font-size:12px;
+              ">
+                Server:
+                ${formatDate(
+                  r.created_at
+                )}
+              </div>
+
+              ${evidenceButton}
+
+            </div>
+          `;
+
+        }).join("");
+
+    }
+
+    status.className =
+      "notice green";
+
+    status.textContent =
+      "Server aktif • " +
+      (data.total || 0) +
+      " laporan";
+
+  }catch(error){
+
+    status.className =
+      "notice red";
+
+    status.textContent =
+      error.message;
+
+    container.innerHTML = "";
+
+  }
+
+}
                 border-left:4px solid ${border};
               "
             >
