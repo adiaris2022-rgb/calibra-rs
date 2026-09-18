@@ -1770,6 +1770,12 @@ async function loadLiveReports(){
       (data.total || 0) +
       " laporan";
 
+    if(data.reports && data.reports.length){
+      data.reports.forEach(function(r){
+        loadActions(Number(r.id));
+      });
+    }
+
   }catch(error){
 
     status.className =
