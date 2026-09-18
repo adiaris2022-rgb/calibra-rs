@@ -1707,13 +1707,16 @@ async function loadLiveReports(){
                 </div>
               `;
           
-          const actionButton = `
+          const actionButton =
+            currentUser && currentUser.username === "pj"
+              ? `
             <button type="button" class="btn" style="margin-top:12px;" onclick="openActionForm(${Number(r.id)},${Number(r.equipment_id)}, this)">
               🔧 Buat Tindakan / Work Order
             </button>
             <div id="action-form-${Number(r.id)}" style="margin-top:10px;"></div>
             <div id="action-list-${Number(r.id)}" style="margin-top:10px;"></div>
-          `;
+          `
+              : "";
 
           return `
             <div
@@ -1795,7 +1798,12 @@ async function loadLiveReports(){
       (data.total || 0) +
       " laporan";
 
-    if(data.reports && data.reports.length){
+    if(
+      currentUser &&
+      currentUser.username === "pj" &&
+      data.reports &&
+      data.reports.length
+    ){
       data.reports.forEach(function(r){
         loadActions(Number(r.id));
       });
@@ -1839,6 +1847,7 @@ async function loadLiveReports(){
 }
 
 function openActionForm(reportId,equipmentId,button){
+  if(!currentUser || currentUser.username !== "pj") return;
   const box=document.getElementById("action-form-"+reportId);
   if(!box)return;
   if(box.innerHTML){box.innerHTML="";return;}
@@ -1854,6 +1863,10 @@ function openActionForm(reportId,equipmentId,button){
 }
 
 async function saveAction(reportId,equipmentId){
+  if(!currentUser || currentUser.username !== "pj"){
+    alert("Work Order hanya dapat dibuat oleh Penanggung Jawab.");
+    return;
+  }
   const title=document.getElementById("action-title-"+reportId).value.trim();
   const description=document.getElementById("action-desc-"+reportId).value.trim();
   const assignedTo=document.getElementById("action-assignee-"+reportId).value.trim();
@@ -1868,6 +1881,7 @@ async function saveAction(reportId,equipmentId){
 }
 
 async function loadActions(reportId){
+  if(!currentUser || currentUser.username !== "pj") return;
   const box=document.getElementById("action-list-"+reportId);
   if(!box)return;
   try{
@@ -1875,12 +1889,16 @@ async function loadActions(reportId){
     const data=await response.json();
     if(!response.ok||!data.ok)throw new Error(data.error||"Gagal mengambil tindakan.");
     box.innerHTML=data.actions.map(function(a){
-      return \`<div class="notice" style="margin-top:8px;"><b>🔧 \${escapeHtml(a.title)}</b><br>PIC: \${escapeHtml(a.assigned_to||"-")}<br>Status: <b>\${escapeHtml(a.status)}</b><br><select onchange="updateAction(\${Number(a.id)},this.value)" style="margin-top:8px;padding:8px;"><option>NEW</option><option>ACKNOWLEDGED</option><option>IN PROGRESS</option><option>FIXED</option><option>VERIFIED</option><option>CLOSED</option></select></div>\`;
+      return `<div class="notice" style="margin-top:8px;"><b>🔧 \${escapeHtml(a.title)}</b><br>PIC: \${escapeHtml(a.assigned_to||"-")}<br>Status: <b>\${escapeHtml(a.status)}</b><br><select onchange="updateAction(\${Number(a.id)},this.value)" style="margin-top:8px;padding:8px;"><option>NEW</option><option>ACKNOWLEDGED</option><option>IN PROGRESS</option><option>FIXED</option><option>VERIFIED</option><option>CLOSED</option></select></div>`;
     }).join("") || '<div style="color:#64748b;font-size:13px;">Belum ada tindakan.</div>';
   }catch(error){box.innerHTML='<div class="notice orange">'+escapeHtml(error.message)+'</div>';}
 }
 
 async function updateAction(id,status){
+  if(!currentUser || currentUser.username !== "pj"){
+    alert("Work Order hanya dapat diperbarui oleh Penanggung Jawab.");
+    return;
+  }
   try{
     const response=await fetch("/api/actions/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:status})});
     const data=await response.json();
