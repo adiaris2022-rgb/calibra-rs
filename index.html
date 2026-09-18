@@ -1005,6 +1005,7 @@ function showSection(id,button){
   if(id === "workorders"){
     if(!currentUser || currentUser.username !== "pj") return;
     loadWorkOrders();
+    startWorkOrderRealtime();
   }
 }
 
@@ -1823,7 +1824,19 @@ async function loadLiveReports(){
 
 }
 
-  async function loadWorkOrders(){
+  let workOrderRealtimeTimer = null;
+
+function startWorkOrderRealtime(){
+  if(workOrderRealtimeTimer) clearInterval(workOrderRealtimeTimer);
+  workOrderRealtimeTimer=setInterval(function(){
+    if(currentUser && currentUser.username==="pj"){
+      const section=document.getElementById("workorders");
+      if(section && section.classList.contains("active")) loadWorkOrders();
+    }
+  },5000);
+}
+
+async function loadWorkOrders(){
   const box=document.getElementById("workOrderList");
   if(!box)return;
   box.innerHTML='<div class="notice blue">Memuat Work Order...</div>';
@@ -1833,6 +1846,21 @@ async function loadLiveReports(){
     if(!response.ok||!data.ok)throw new Error(data.error||"Gagal mengambil Work Order.");
     if(!data.actions.length){box.innerHTML='<div class="notice green">Belum ada Work Order.</div>';return;}
     box.innerHTML=data.actions.map(function(a){
+      const timeline=Array.isArray(a.timeline)?a.timeline:[];
+      const timelineHtml=timeline.length
+        ? '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;">'+
+          '<b>Timeline Real-Time</b>'+
+          '<div style="margin-top:8px;">'+
+          timeline.map(function(t){
+            return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;">'+
+              '<div><b>'+escapeHtml(t.to_status)+'</b></div>'+
+              '<div style="font-size:12px;color:#64748b;">'+formatDate(t.changed_at)+
+              ' · oleh '+escapeHtml(t.changed_by||"-")+'</div>'+
+              '</div>';
+          }).join("")+
+          '</div></div>'
+        : '<div style="margin-top:14px;color:#64748b;font-size:13px;">Belum ada riwayat status.</div>';
+
       return '<div class="card" style="margin-bottom:12px;border-left:4px solid #2563eb;">'+
         '<strong>'+escapeHtml(a.asset_code||"-")+' — '+escapeHtml(a.equipment_name||"-")+'</strong>'+
         '<div style="margin-top:8px;"><b>'+escapeHtml(a.title)+'</b></div>'+
@@ -1841,7 +1869,9 @@ async function loadLiveReports(){
         '<div style="margin-top:8px;">Status: <b>'+escapeHtml(a.status)+'</b></div>'+
         '<select style="margin-top:10px;padding:8px;" onchange="updateAction('+Number(a.id)+',this.value)">'+
           ["NEW","ACKNOWLEDGED","IN PROGRESS","FIXED","VERIFIED","CLOSED"].map(function(s){return '<option '+(s===a.status?'selected':'')+'>'+s+'</option>';}).join("")+
-        '</select></div>';
+        '</select>'+
+        timelineHtml+
+        '</div>';
     }).join("");
   }catch(error){box.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
 }
@@ -1900,7 +1930,7 @@ async function updateAction(id,status){
     return;
   }
   try{
-    const response=await fetch("/api/actions/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:status})});
+    const response=await fetch("/api/actions/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:status,changedBy:currentUser?currentUser.username:""})});
     const data=await response.json();
     if(!response.ok||!data.ok)throw new Error(data.error||"Status gagal diperbarui.");
     if(typeof loadWorkOrders==="function") loadWorkOrders();
