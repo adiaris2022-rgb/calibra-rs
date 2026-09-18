@@ -192,6 +192,11 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   `);
 
   await pool.query(`
+    ALTER TABLE field_reports
+    ADD COLUMN IF NOT EXISTS officer_username TEXT
+  `);
+
+  await pool.query(`
     INSERT INTO hospitals (code, name)
     VALUES ('RS-DEMO', 'Rumah Sakit Demo')
     ON CONFLICT (code) DO NOTHING
@@ -644,13 +649,15 @@ app.post("/api/field-report", async (req, res) => {
     const result = await pool.query(`
       INSERT INTO field_reports (
         equipment_id,
-        report
+        report,
+        officer_username
       )
-      VALUES ($1,$2)
+      VALUES ($1,$2,$3)
       RETURNING *
     `, [
       Number(req.body.equipmentId),
-      clean(req.body.report)
+      clean(req.body.report),
+      clean(req.body.officerUsername || "")
     ]);
 
     res.json({
