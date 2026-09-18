@@ -759,6 +759,18 @@ app.get("/api/evidence/:id", async (req, res) => {
         evidence_type
       FROM evidence_files
       WHERE id = $1
+         OR (
+           report_id = (
+             SELECT report_id
+             FROM evidence_files
+             WHERE id = $1
+             LIMIT 1
+           )
+           AND evidence_type = 'STAMPED'
+         )
+      ORDER BY
+        CASE WHEN evidence_type = 'STAMPED' THEN 0 ELSE 1 END,
+        created_at DESC
       LIMIT 1
       `,
       [id]
