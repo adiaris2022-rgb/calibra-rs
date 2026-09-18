@@ -1668,8 +1668,8 @@ async function loadLiveReports(){
                   type="button"
                   class="btn"
                   style="margin-top:12px;"
-                  onclick="viewEvidence(${Number(r.evidence_id)})">
-                  📷 Lihat Evidence
+                  onclick="viewEvidence(${Number(r.id)},${Number(r.evidence_id)})">
+                  📷 Lihat Evidence Stamp
                 </button>
               `
               : `
@@ -1859,52 +1859,58 @@ async function submitFieldReport(){
     if(typeof loadLiveReports==="function")loadLiveReports();
   }catch(error){result.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
 }
-async function viewEvidence(id){
+async function viewEvidence(reportId, fallbackEvidenceId){
 
-  if(!id){
+  if(!reportId && !fallbackEvidenceId){
     return;
   }
 
   try{
+    let evidenceId = null;
 
-    const response =
-      await fetch(
-        "/api/evidence/" + id,
-        {
-          cache:"no-store"
+    if(reportId){
+      const stampedResponse = await fetch(
+        "/api/field-report/" + reportId + "/stamped-evidence",
+        {cache:"no-store"}
+      );
+
+      if(stampedResponse.ok){
+        const stampedData = await stampedResponse.json();
+        if(stampedData.ok && stampedData.evidence){
+          evidenceId = Number(stampedData.evidence.id);
         }
-      );
-
-    if(!response.ok){
-      throw new Error(
-        "Evidence tidak dapat dibuka."
-      );
+      }
     }
 
-    const blob =
-      await response.blob();
+    if(!evidenceId){
+      evidenceId = Number(fallbackEvidenceId);
+    }
 
-    const url =
-      URL.createObjectURL(blob);
+    if(!evidenceId){
+      throw new Error("Stamped evidence belum tersedia.");
+    }
 
-    window.open(
-      url,
-      "_blank"
+    const response = await fetch(
+      "/api/evidence/" + evidenceId + "?t=" + Date.now(),
+      {cache:"no-store"}
     );
+
+    if(!response.ok){
+      throw new Error("Evidence tidak dapat dibuka.");
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
 
     setTimeout(function(){
       URL.revokeObjectURL(url);
     }, 60000);
 
   }catch(error){
-
-    alert(
-      error.message
-    );
-
+    alert(error.message);
   }
-
-        }
+}
 /* ========================
    HELPERS
 ======================== */
