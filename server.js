@@ -197,6 +197,22 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS actions (
+      id SERIAL PRIMARY KEY,
+      report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE,
+      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      description TEXT,
+      assigned_to TEXT,
+      status TEXT DEFAULT 'NEW',
+      created_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+
+  await pool.query(`
     INSERT INTO hospitals (code, name)
     VALUES ('RS-DEMO', 'Rumah Sakit Demo')
     ON CONFLICT (code) DO NOTHING
@@ -824,6 +840,62 @@ app.get("/api/evidence/:id", async (req, res) => {
   }
 
 });
+/* ACTION / WORK ORDER */
+app.post("/api/actions", async (req, res) => {
+  if (!needDb(res)) return;
+  try {
+    const result = await pool.query(
+      `INSERT INTO actions (
+        report_id, equipment_id, title, description, assigned_to, created_by
+      ) VALUES ($1,$2,$3,$4,$5,$6)
+      RETURNING *`,
+      [
+        Number(req.body.reportId),
+        Number(req.body.equipmentId),
+        clean(req.body.title),
+        clean(req.body.description || ""),
+        clean(req.body.assignedTo || ""),
+        clean(req.body.createdBy || "")
+      ]
+    );
+    res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/actions/:reportId", async (req, res) => {
+  if (!needDb(res)) return;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM actions WHERE report_id = $1 ORDER BY created_at DESC`,
+      [Number(req.params.reportId)]
+    );
+    res.json({ ok: true, actions: result.rows });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.patch("/api/actions/:id", async (req, res) => {
+  if (!needDb(res)) return;
+  try {
+    const status = clean(req.body.status || "").toUpperCase();
+    const allowed = ["NEW","ACKNOWLEDGED","IN PROGRESS","FIXED","VERIFIED","CLOSED"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ ok: false, error: "Status tindakan tidak valid." });
+    }
+    const result = await pool.query(
+      `UPDATE actions SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [status, Number(req.params.id)]
+    );
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: "Tindakan tidak ditemukan." });
+    res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 /* GET STAMPED EVIDENCE BY REPORT */
 app.get("/api/field-report/:id/stamped-evidence", async (req, res) => {
   if (!needDb(res)) return;
