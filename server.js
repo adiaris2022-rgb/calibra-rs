@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 const AUTH_SECRET = process.env.CALIBRA_AUTH_SECRET || process.env.DATABASE_URL || "calibra-demo-secret-change-in-production";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
+const REQUIRE_TENANT = process.env.CALIBRA_REQUIRE_TENANT === "true";
 
 const AUTH_USERS = {
   direksi: { password: process.env.CALIBRA_DIREKSI_PASSWORD || "calibra123", name: "Direksi", role: "DIREKSI", hospitalId: process.env.CALIBRA_DEMO_HOSPITAL_ID || null },
@@ -58,6 +59,16 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireTenant(req, res, next) {
+  if (REQUIRE_TENANT && !req.hospitalId) {
+    return res.status(403).json({
+      ok: false,
+      error: "Hospital tenant belum ditetapkan untuk akun ini."
+    });
+  }
+  next();
+}
+
 function requireRole(...roles) {
   return function(req, res, next) {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -76,6 +87,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/api", requireAuth);
+app.use("/api", requireTenant);
 
 // Pastikan browser selalu mengambil frontend terbaru.
 app.use(express.static(__dirname, {
@@ -530,7 +542,7 @@ app.get("/api/equipment", async (req, res) => {
           ELSE 'VALID'
         END AS calibration_status
       FROM equipment
-      WHERE ($1::int IS NULL OR hospital_id = $1)
+      WHERE hospital_id = COALESCE($1::int, hospital_id)
       ORDER BY id DESC
       LIMIT 500
     `, [req.hospitalId || null]);
