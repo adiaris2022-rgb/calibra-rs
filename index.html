@@ -1238,7 +1238,9 @@ function showApp(){
   document
     .getElementById("currentRole")
     .textContent =
-      currentUser.role;
+      currentUser.role === "PENANGGUNG JAWAB"
+        ? "ADMIN IPSRS / PENANGGUNG JAWAB"
+        : currentUser.role;
 
   const workOrderNav = document.getElementById("workOrderNav");
   if(workOrderNav){
