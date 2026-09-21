@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "multer": "^2.0.2",
+    "multer": "^2.3.0",
     "pg": "^8.16.3",
     "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
