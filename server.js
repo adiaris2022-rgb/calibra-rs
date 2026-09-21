@@ -4,10 +4,77 @@ const multer = require("multer");
 const XLSX = require("xlsx");
 const { Pool } = require("pg");
 const QRCode = require("qrcode");
+const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const AUTH_SECRET = process.env.CALIBRA_AUTH_SECRET || "calibra-demo-secret-change-in-production";
+const AUTH_TTL_SECONDS = 12 * 60 * 60;
+
+const AUTH_USERS = {
+  direksi: { password: process.env.CALIBRA_DIREKSI_PASSWORD || "calibra123", name: "Direksi", role: "DIREKSI" },
+  pj: { password: process.env.CALIBRA_PJ_PASSWORD || "calibra123", name: "Penanggung Jawab", role: "PENANGGUNG JAWAB" },
+  petugas: { password: process.env.CALIBRA_PETUGAS_PASSWORD || "calibra123", name: "Petugas Lapangan", role: "PETUGAS LAPANGAN" }
+};
+
+function base64Url(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function signToken(payload) {
+  const body = base64Url(JSON.stringify(payload));
+  const signature = crypto.createHmac("sha256", AUTH_SECRET).update(body).digest("base64url");
+  return body + "." + signature;
+}
+
+function verifyToken(token) {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [body, signature] = parts;
+  const expected = crypto.createHmac("sha256", AUTH_SECRET).update(body).digest("base64url");
+  try {
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function requireAuth(req, res, next) {
+  if (req.path === "/health" || req.path === "/login") return next();
+  const header = clean(req.headers.authorization || "");
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  const user = verifyToken(token);
+  if (!user) {
+    return res.status(401).json({ ok: false, error: "Sesi tidak valid atau sudah berakhir. Silakan login kembali." });
+  }
+  req.user = user;
+  next();
+}
+
+function requireRole(...roles) {
+  return function(req, res, next) {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ ok: false, error: "Akses tidak diizinkan untuk peran ini." });
+    }
+    next();
+  };
+}
+
 app.use(express.json());
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
+
+app.use("/api", requireAuth);
 
 // Pastikan browser selalu mengambil frontend terbaru.
 app.use(express.static(__dirname, {
@@ -325,6 +392,33 @@ async function notify(recipientRole, recipientUsername, title, message) {
   } catch (error) { console.error("Notification gagal:", error.message); }
 }
 
+/* AUTH */
+app.post("/api/login", (req, res) => {
+  const username = clean(req.body?.username).toLowerCase();
+  const password = String(req.body?.password || "");
+  const account = AUTH_USERS[username];
+
+  if (!account || account.password !== password) {
+    return res.status(401).json({ ok: false, error: "Username atau password salah." });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const token = signToken({
+    username,
+    name: account.name,
+    role: account.role,
+    iat: now,
+    exp: now + AUTH_TTL_SECONDS
+  });
+
+  res.json({
+    ok: true,
+    token,
+    user: { username, name: account.name, role: account.role },
+    expiresAt: new Date((now + AUTH_TTL_SECONDS) * 1000).toISOString()
+  });
+});
+
 /* HEALTHCHECK RAILWAY */
 app.get("/api/health", (req, res) => {
   res.json({
@@ -443,7 +537,7 @@ app.get("/api/equipment", async (req, res) => {
 });
 
 /* PREVIEW EXCEL */
-app.post("/api/import-excel/preview", upload.single("file"), async (req, res) => {
+app.post("/api/import-excel/preview", requireRole("PENANGGUNG JAWAB"), upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       ok: false,
@@ -490,7 +584,7 @@ app.post("/api/import-excel/preview", upload.single("file"), async (req, res) =>
 });
 
 /* CONFIRM IMPORT EXCEL */
-app.post("/api/import-excel/confirm", upload.single("file"), async (req, res) => {
+app.post("/api/import-excel/confirm", requireRole("PENANGGUNG JAWAB"), upload.single("file"), async (req, res) => {
   if (!needDb(res)) return;
 
   if (!req.file) {
@@ -651,7 +745,7 @@ app.get("/api/equipment/:code/qr", async (req, res) => {
   }
 });
 /* QR: INTEGRATE / GENERATE / COMPANION */
-app.post("/api/equipment/:id/qr", async (req, res) => {
+app.post("/api/equipment/:id/qr", requireRole("PENANGGUNG JAWAB"), async (req, res) => {
   if (!needDb(res)) return;
 
   const id = Number(req.params.id);
@@ -720,7 +814,7 @@ app.post("/api/equipment/:id/qr", async (req, res) => {
 });
 
 /* INSPEKSI */
-app.post("/api/inspection", async (req, res) => {
+app.post("/api/inspection", requireRole("PETUGAS LAPANGAN", "PENANGGUNG JAWAB"), async (req, res) => {
   if (!needDb(res)) return;
 
   try {
@@ -752,7 +846,7 @@ app.post("/api/inspection", async (req, res) => {
 });
 
 /* LAPORAN PETUGAS */
-app.post("/api/field-report", async (req, res) => {
+app.post("/api/field-report", requireRole("PETUGAS LAPANGAN", "PENANGGUNG JAWAB"), async (req, res) => {
   if (!needDb(res)) return;
 
   try {
@@ -767,10 +861,10 @@ app.post("/api/field-report", async (req, res) => {
     `, [
       Number(req.body.equipmentId),
       clean(req.body.report),
-      clean(req.body.officerUsername || "")
+      clean(req.user.username)
     ]);
 
-    await writeAudit("FIELD_REPORT_CREATED",{reportId:result.rows[0].id,equipmentId:Number(req.body.equipmentId)},req.body.officerUsername);
+    await writeAudit("FIELD_REPORT_CREATED",{reportId:result.rows[0].id,equipmentId:Number(req.body.equipmentId)},req.user.username);
     await notify("PENANGGUNG JAWAB","pj","Laporan lapangan baru","Laporan baru masuk untuk alat ID "+Number(req.body.equipmentId)+".");
     res.json({
       ok: true,
@@ -788,6 +882,7 @@ app.post("/api/field-report", async (req, res) => {
 
 app.post(
   "/api/evidence",
+  requireRole("PETUGAS LAPANGAN", "PENANGGUNG JAWAB"),
   upload.single("photo"),
   async (req, res) => {
 
@@ -938,7 +1033,7 @@ app.get("/api/evidence/:id", async (req, res) => {
 
 });
 /* ACTION / WORK ORDER */
-app.post("/api/actions", async (req, res) => {
+app.post("/api/actions", requireRole("PENANGGUNG JAWAB"), async (req, res) => {
   if (!needDb(res)) return;
   try {
     const result = await pool.query(
@@ -952,16 +1047,16 @@ app.post("/api/actions", async (req, res) => {
         clean(req.body.title),
         clean(req.body.description || ""),
         clean(req.body.assignedTo || ""),
-        clean(req.body.createdBy || "")
+        clean(req.user.username)
       ]
     );
     await pool.query(
       `INSERT INTO action_status_history (
         action_id, from_status, to_status, changed_by
       ) VALUES ($1,$2,$3,$4)`,
-      [result.rows[0].id, null, result.rows[0].status, clean(req.body.createdBy || "")]
+      [result.rows[0].id, null, result.rows[0].status, clean(req.user.username)]
     );
-    await writeAudit("WORK_ORDER_CREATED",{actionId:result.rows[0].id,reportId:Number(req.body.reportId),equipmentId:Number(req.body.equipmentId)},req.body.createdBy);
+    await writeAudit("WORK_ORDER_CREATED",{actionId:result.rows[0].id,reportId:Number(req.body.reportId),equipmentId:Number(req.body.equipmentId)},req.user.username);
     await notify("PENANGGUNG JAWAB","pj","Work Order dibuat","Work Order baru dibuat untuk alat ID "+Number(req.body.equipmentId)+".");
     res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
   } catch (error) {
@@ -1032,7 +1127,7 @@ app.get("/api/actions/:reportId", async (req, res) => {
   }
 });
 
-app.patch("/api/actions/:id", async (req, res) => {
+app.patch("/api/actions/:id", requireRole("PENANGGUNG JAWAB"), async (req, res) => {
   if (!needDb(res)) return;
   try {
     const status = clean(req.body.status || "").toUpperCase();
@@ -1060,7 +1155,7 @@ app.patch("/api/actions/:id", async (req, res) => {
       [status, Number(req.params.id)]
     );
 
-    const changedBy = clean(req.body.changedBy || current.rows[0].created_by || "");
+    const changedBy = clean(req.user.username);
     await pool.query(
       `INSERT INTO action_status_history (
         action_id, from_status, to_status, changed_by
@@ -1107,22 +1202,22 @@ app.get("/api/field-report/:id/stamped-evidence", async (req, res) => {
 
 /* GET LAPORAN PETUGAS */
 /* CERTIFICATE / DOCUMENT VAULT */
-app.post("/api/certificates",upload.single("file"),async(req,res)=>{
+app.post("/api/certificates",requireRole("PENANGGUNG JAWAB"),upload.single("file"),async(req,res)=>{
   if(!needDb(res))return;
   try{
     const equipmentId=Number(req.body.equipmentId);
     if(!equipmentId||!req.file)return res.status(400).json({ok:false,error:"Alat dan file sertifikat wajib diisi."});
-    const result=await pool.query(`INSERT INTO certificate_files (equipment_id,original_name,mime_type,file_size,file_data,uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,equipment_id,original_name,mime_type,file_size,uploaded_by,created_at`,[equipmentId,req.file.originalname,req.file.mimetype,req.file.size,req.file.buffer,clean(req.body.uploadedBy||"")]);
-    await writeAudit("CERTIFICATE_UPLOADED",{certificateId:result.rows[0].id,equipmentId},req.body.uploadedBy);
+    const result=await pool.query(`INSERT INTO certificate_files (equipment_id,original_name,mime_type,file_size,file_data,uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,equipment_id,original_name,mime_type,file_size,uploaded_by,created_at`,[equipmentId,req.file.originalname,req.file.mimetype,req.file.size,req.file.buffer,clean(req.user.username)]);
+    await writeAudit("CERTIFICATE_UPLOADED",{certificateId:result.rows[0].id,equipmentId},req.user.username);
     res.json({ok:true,certificate:result.rows[0]});
   }catch(error){res.status(500).json({ok:false,error:error.message});}
 });
-app.get("/api/certificates",async(req,res)=>{
+app.get("/api/certificates",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
   try{const result=await pool.query(`SELECT c.id,c.equipment_id,e.asset_code,e.name AS equipment_name,c.original_name,c.mime_type,c.file_size,c.uploaded_by,c.created_at FROM certificate_files c LEFT JOIN equipment e ON e.id=c.equipment_id ORDER BY c.created_at DESC LIMIT 200`);res.json({ok:true,certificates:result.rows});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
-app.get("/api/certificates/:id",async(req,res)=>{
+app.get("/api/certificates/:id",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
   try{const result=await pool.query(`SELECT mime_type,original_name,file_data FROM certificate_files WHERE id=$1`,[Number(req.params.id)]);if(!result.rows.length)return res.status(404).json({ok:false,error:"Sertifikat tidak ditemukan."});res.setHeader("Content-Type",result.rows[0].mime_type);res.setHeader("Content-Disposition",`inline; filename="${result.rows[0].original_name}"`);res.send(result.rows[0].file_data);}
   catch(error){res.status(500).json({ok:false,error:error.message});}
@@ -1136,19 +1231,19 @@ app.get("/api/notifications",async(req,res)=>{
 });
 app.patch("/api/notifications/:id/read",async(req,res)=>{
   if(!needDb(res))return;
-  try{await pool.query(`UPDATE notifications SET is_read=TRUE WHERE id=$1`,[Number(req.params.id)]);res.json({ok:true});}
+  try{await pool.query(`UPDATE notifications SET is_read=TRUE WHERE id=$1 AND (recipient_username=$2 OR recipient_role=$3)`,[Number(req.params.id),clean(req.user.username),clean(req.user.role)]);res.json({ok:true});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 
 /* AUDIT */
-app.get("/api/audit-logs",async(req,res)=>{
+app.get("/api/audit-logs",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
   try{const result=await pool.query(`SELECT id,action,details,created_at FROM audit_logs ORDER BY created_at DESC,id DESC LIMIT 200`);res.json({ok:true,logs:result.rows});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 
 /* EXPORT */
-app.get("/api/export/report.csv",async(req,res)=>{
+app.get("/api/export/report.csv",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
   try{
     const result=await pool.query(`SELECT e.asset_code,e.name,e.brand,e.model,e.serial_number,e.room,e.calibration_date,e.due_date,CASE WHEN e.due_date IS NULL THEN 'UNKNOWN' WHEN e.due_date < CURRENT_DATE THEN 'EXPIRED' WHEN e.due_date < CURRENT_DATE + INTERVAL '31 days' THEN 'NEAR_DUE' ELSE 'VALID' END AS calibration_status FROM equipment e ORDER BY e.asset_code`);
