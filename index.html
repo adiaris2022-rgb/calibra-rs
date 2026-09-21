@@ -1864,10 +1864,9 @@ async function loadWorkOrders(){
       });
       const displayTimeline=uniqueTimeline.map(function(t){return timelineMap[String(t.to_status||"")];});
       displayTimeline.sort(function(x,y){
-        const order=["NEW","ACKNOWLEDGED","IN PROGRESS","FIXED","VERIFIED","CLOSED"];
-        const xi=order.indexOf(x.to_status);
-        const yi=order.indexOf(y.to_status);
-        return (xi<0?999:xi)-(yi<0?999:yi);
+        const xt=new Date(x.changed_at||0).getTime();
+        const yt=new Date(y.changed_at||0).getTime();
+        return xt-yt;
       });
 
       const timelineHtml=displayTimeline.length
