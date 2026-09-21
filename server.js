@@ -936,25 +936,33 @@ app.get("/api/actions/all", async (req, res) => {
           COALESCE((
             SELECT json_agg(
               json_build_object(
-                'id', h.id,
-                'from_status', h.from_status,
-                'to_status', h.to_status,
-                'changed_by', h.changed_by,
-                'changed_at', h.changed_at
+                'id', x.id,
+                'from_status', x.from_status,
+                'to_status', x.to_status,
+                'changed_by', x.changed_by,
+                'changed_at', x.changed_at
               )
-              ORDER BY h.changed_at ASC, h.id ASC
+              ORDER BY x.changed_at ASC, x.id ASC
             )
             FROM (
-              SELECT DISTINCT ON (to_status)
+              SELECT
                 id,
                 from_status,
                 to_status,
                 changed_by,
                 changed_at
-              FROM action_status_history
-              WHERE action_id = a.id
-              ORDER BY to_status, changed_at DESC, id DESC
-            ) h
+              FROM (
+                SELECT
+                  h.*,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY h.to_status
+                    ORDER BY h.changed_at DESC, h.id DESC
+                  ) AS rn
+                FROM action_status_history h
+                WHERE h.action_id = a.id
+              ) ranked
+              WHERE ranked.rn = 1
+            ) x
           ), '[]'::json) AS timeline
        FROM actions a
        LEFT JOIN equipment e ON e.id = a.equipment_id
