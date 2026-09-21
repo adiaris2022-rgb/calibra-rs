@@ -8,7 +8,7 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const AUTH_SECRET = process.env.CALIBRA_AUTH_SECRET || "calibra-demo-secret-change-in-production";
+const AUTH_SECRET = process.env.CALIBRA_AUTH_SECRET || process.env.DATABASE_URL || "calibra-demo-secret-change-in-production";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
 
 const AUTH_USERS = {
@@ -89,7 +89,15 @@ app.use(express.static(__dirname, {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 1,
+    fields: 20,
+    parts: 25,
+    fieldSize: 64 * 1024,
+    fieldNameSize: 100,
+    fieldArrayIndexLimit: 100
+  }
 });
 
 const pool = process.env.DATABASE_URL
@@ -910,6 +918,14 @@ app.post(
         });
       }
 
+      const allowedEvidenceTypes = ["image/jpeg", "image/png", "image/webp"];
+      if (!allowedEvidenceTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({
+          ok: false,
+          error: "Format evidence harus JPG, PNG, atau WEBP."
+        });
+      }
+
       const result = await pool.query(
         `
         INSERT INTO evidence_files (
@@ -1207,6 +1223,10 @@ app.post("/api/certificates",requireRole("PENANGGUNG JAWAB"),upload.single("file
   try{
     const equipmentId=Number(req.body.equipmentId);
     if(!equipmentId||!req.file)return res.status(400).json({ok:false,error:"Alat dan file sertifikat wajib diisi."});
+    const allowedCertificateTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    if (!allowedCertificateTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ok:false,error:"Format sertifikat harus PDF, JPG, PNG, atau WEBP."});
+    }
     const result=await pool.query(`INSERT INTO certificate_files (equipment_id,original_name,mime_type,file_size,file_data,uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,equipment_id,original_name,mime_type,file_size,uploaded_by,created_at`,[equipmentId,req.file.originalname,req.file.mimetype,req.file.size,req.file.buffer,clean(req.user.username)]);
     await writeAudit("CERTIFICATE_UPLOADED",{certificateId:result.rows[0].id,equipmentId},req.user.username);
     res.json({ok:true,certificate:result.rows[0]});
@@ -1219,14 +1239,15 @@ app.get("/api/certificates",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,
 });
 app.get("/api/certificates/:id",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
-  try{const result=await pool.query(`SELECT mime_type,original_name,file_data FROM certificate_files WHERE id=$1`,[Number(req.params.id)]);if(!result.rows.length)return res.status(404).json({ok:false,error:"Sertifikat tidak ditemukan."});res.setHeader("Content-Type",result.rows[0].mime_type);res.setHeader("Content-Disposition",`inline; filename="${result.rows[0].original_name}"`);res.send(result.rows[0].file_data);}
+  try{const result=await pool.query(`SELECT mime_type,original_name,file_data FROM certificate_files WHERE id=$1`,[Number(req.params.id)]);if(!result.rows.length)return res.status(404).json({ok:false,error:"Sertifikat tidak ditemukan."});res.setHeader("Content-Type",result.rows[0].mime_type);const safeFilename = String(result.rows[0].original_name || "certificate").replace(/[\r\n"]/g, "_").slice(0, 180);
+    res.setHeader("Content-Disposition",`inline; filename="${safeFilename}"`);res.send(result.rows[0].file_data);}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 
 /* NOTIFICATIONS */
 app.get("/api/notifications",async(req,res)=>{
   if(!needDb(res))return;
-  try{const result=await pool.query(`SELECT id,title,message,is_read,created_at FROM notifications WHERE (recipient_username=$1 OR recipient_role=$2) ORDER BY created_at DESC LIMIT 50`,[clean(req.query.username||""),clean(req.query.role||"")]);res.json({ok:true,notifications:result.rows});}
+  try{const result=await pool.query(`SELECT id,title,message,is_read,created_at FROM notifications WHERE (recipient_username=$1 OR recipient_role=$2) ORDER BY created_at DESC LIMIT 50`,[clean(req.user.username),clean(req.user.role)]);res.json({ok:true,notifications:result.rows});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 app.patch("/api/notifications/:id/read",async(req,res)=>{
