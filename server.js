@@ -562,7 +562,7 @@ app.patch("/api/me/password", async (req,res)=>{
 app.get("/api/hospital", async (req,res)=>{
   if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
   try{
-    const r=await pool.query(`SELECT id,code,name,address,city,phone,email,CASE WHEN logo_data IS NOT NULL THEN '/api/hospital/logo' ELSE NULL END AS logo_url FROM hospitals WHERE id=$1 LIMIT 1`,[req.hospitalId||0]);
+    const r=await pool.query(`SELECT id,code,name,address,city,phone,email,logo_mime,CASE WHEN logo_data IS NOT NULL THEN encode(logo_data,'base64') ELSE NULL END AS logo_base64 FROM hospitals WHERE id=$1 LIMIT 1`,[req.hospitalId||0]);
     if(!r.rows.length) return res.status(404).json({ok:false,error:"Rumah sakit tidak ditemukan."});
     res.json({ok:true,hospital:r.rows[0]});
   }catch(error){res.status(500).json({ok:false,error:error.message});}
