@@ -386,7 +386,9 @@ app.get("/api/dashboard", async (req, res) => {
         )::int AS near_due,
         COUNT(*) FILTER (
           WHERE due_date < CURRENT_DATE
-        )::int AS expired
+        )::int AS expired,
+        (SELECT COUNT(*)::int FROM field_reports WHERE status = 'OPEN') AS open_findings,
+        (SELECT COUNT(*)::int FROM actions WHERE status NOT IN ('CLOSED')) AS open_actions
       FROM equipment
     `);
 
@@ -397,7 +399,8 @@ app.get("/api/dashboard", async (req, res) => {
       valid: r.valid,
       nearDue: r.near_due,
       expired: r.expired,
-      openFindings: 0,
+      openFindings: r.open_findings,
+      openActions: r.open_actions,
       database: true
     });
   } catch (error) {
