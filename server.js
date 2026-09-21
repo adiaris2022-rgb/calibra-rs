@@ -1286,6 +1286,8 @@ app.get("/api/evidence/:id", async (req, res) => {
 app.post("/api/actions", requireRole("PENANGGUNG JAWAB"), async (req, res) => {
   if (!needDb(res)) return;
   try {
+    const ownership=await pool.query("SELECT e.id FROM equipment e JOIN field_reports fr ON fr.id=$2 AND fr.equipment_id=e.id WHERE e.id=$1 AND e.hospital_id=$3 AND fr.hospital_id=$3 LIMIT 1",[Number(req.body.equipmentId),Number(req.body.reportId),req.hospitalId||0]);
+    if(!ownership.rows.length)return res.status(404).json({ok:false,error:"Alat atau laporan tidak berada pada tenant ini."});
     const result = await pool.query(
       `INSERT INTO actions (
         hospital_id, report_id, equipment_id, title, description, assigned_to, created_by
@@ -1459,6 +1461,8 @@ app.post("/api/certificates",requireRole("PENANGGUNG JAWAB"),upload.single("file
   try{
     const equipmentId=Number(req.body.equipmentId);
     if(!equipmentId||!req.file)return res.status(400).json({ok:false,error:"Alat dan file sertifikat wajib diisi."});
+    const equipment=await pool.query("SELECT id FROM equipment WHERE id=$1 AND hospital_id=$2 LIMIT 1",[equipmentId,req.hospitalId||0]);
+    if(!equipment.rows.length)return res.status(404).json({ok:false,error:"Alat tidak ditemukan pada tenant ini."});
     const allowedCertificateTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
     if (!allowedCertificateTypes.includes(req.file.mimetype)) {
       return res.status(400).json({ok:false,error:"Format sertifikat harus PDF, JPG, PNG, atau WEBP."});
