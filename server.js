@@ -222,6 +222,25 @@ CREATE TABLE IF NOT EXISTS evidence_files (
       changed_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`CREATE TABLE IF NOT EXISTS certificate_files (
+    id SERIAL PRIMARY KEY,
+    equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
+    original_name TEXT,
+    mime_type TEXT NOT NULL,
+    file_size INTEGER,
+    file_data BYTEA NOT NULL,
+    uploaded_by TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    recipient_role TEXT,
+    recipient_username TEXT,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
 
   // Backfill the initial status event for existing Work Orders.
   await pool.query(`
@@ -288,6 +307,22 @@ function needDb(res) {
   }
 
   return true;
+}
+
+async function writeAudit(action, details, actor) {
+  if (!pool || !dbReady) return;
+  try {
+    await pool.query(`INSERT INTO audit_logs (action, details) VALUES ($1,$2)`,
+      [clean(action), JSON.stringify({ ...(details || {}), actor: clean(actor || "") })]);
+  } catch (error) { console.error("Audit log gagal:", error.message); }
+}
+
+async function notify(recipientRole, recipientUsername, title, message) {
+  if (!pool || !dbReady) return;
+  try {
+    await pool.query(`INSERT INTO notifications (recipient_role, recipient_username, title, message) VALUES ($1,$2,$3,$4)`,
+      [clean(recipientRole), clean(recipientUsername), clean(title), clean(message)]);
+  } catch (error) { console.error("Notification gagal:", error.message); }
 }
 
 /* HEALTHCHECK RAILWAY */
@@ -732,6 +767,8 @@ app.post("/api/field-report", async (req, res) => {
       clean(req.body.officerUsername || "")
     ]);
 
+    await writeAudit("FIELD_REPORT_CREATED",{reportId:result.rows[0].id,equipmentId:Number(req.body.equipmentId)},req.body.officerUsername);
+    await notify("PENANGGUNG JAWAB","pj","Laporan lapangan baru","Laporan baru masuk untuk alat ID "+Number(req.body.equipmentId)+".");
     res.json({
       ok: true,
       report: result.rows[0],
@@ -807,6 +844,7 @@ app.post(
         ]
       );
 
+      await writeAudit("EVIDENCE_UPLOADED",{evidenceId:result.rows[0].id,reportId,equipmentId,evidenceType:clean(req.body.evidenceType||"ORIGINAL").toUpperCase()},"");
       res.json({
         ok: true,
         evidence: result.rows[0],
@@ -920,6 +958,8 @@ app.post("/api/actions", async (req, res) => {
       ) VALUES ($1,$2,$3,$4)`,
       [result.rows[0].id, null, result.rows[0].status, clean(req.body.createdBy || "")]
     );
+    await writeAudit("WORK_ORDER_CREATED",{actionId:result.rows[0].id,reportId:Number(req.body.reportId),equipmentId:Number(req.body.equipmentId)},req.body.createdBy);
+    await notify("PENANGGUNG JAWAB","pj","Work Order dibuat","Work Order baru dibuat untuk alat ID "+Number(req.body.equipmentId)+".");
     res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -1025,6 +1065,8 @@ app.patch("/api/actions/:id", async (req, res) => {
       [Number(req.params.id), previousStatus, status, changedBy]
     );
 
+    await writeAudit("WORK_ORDER_STATUS_CHANGED",{actionId:Number(req.params.id),fromStatus:previousStatus,toStatus:status},changedBy);
+    await notify("PENANGGUNG JAWAB","pj","Work Order berubah","Status Work Order #"+Number(req.params.id)+" menjadi "+status+".");
     res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -1061,6 +1103,58 @@ app.get("/api/field-report/:id/stamped-evidence", async (req, res) => {
 });
 
 /* GET LAPORAN PETUGAS */
+/* CERTIFICATE / DOCUMENT VAULT */
+app.post("/api/certificates",upload.single("file"),async(req,res)=>{
+  if(!needDb(res))return;
+  try{
+    const equipmentId=Number(req.body.equipmentId);
+    if(!equipmentId||!req.file)return res.status(400).json({ok:false,error:"Alat dan file sertifikat wajib diisi."});
+    const result=await pool.query(`INSERT INTO certificate_files (equipment_id,original_name,mime_type,file_size,file_data,uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,equipment_id,original_name,mime_type,file_size,uploaded_by,created_at`,[equipmentId,req.file.originalname,req.file.mimetype,req.file.size,req.file.buffer,clean(req.body.uploadedBy||"")]);
+    await writeAudit("CERTIFICATE_UPLOADED",{certificateId:result.rows[0].id,equipmentId},req.body.uploadedBy);
+    res.json({ok:true,certificate:result.rows[0]});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+app.get("/api/certificates",async(req,res)=>{
+  if(!needDb(res))return;
+  try{const result=await pool.query(`SELECT c.id,c.equipment_id,e.asset_code,e.name AS equipment_name,c.original_name,c.mime_type,c.file_size,c.uploaded_by,c.created_at FROM certificate_files c LEFT JOIN equipment e ON e.id=c.equipment_id ORDER BY c.created_at DESC LIMIT 200`);res.json({ok:true,certificates:result.rows});}
+  catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+app.get("/api/certificates/:id",async(req,res)=>{
+  if(!needDb(res))return;
+  try{const result=await pool.query(`SELECT mime_type,original_name,file_data FROM certificate_files WHERE id=$1`,[Number(req.params.id)]);if(!result.rows.length)return res.status(404).json({ok:false,error:"Sertifikat tidak ditemukan."});res.setHeader("Content-Type",result.rows[0].mime_type);res.setHeader("Content-Disposition",`inline; filename="${result.rows[0].original_name}"`);res.send(result.rows[0].file_data);}
+  catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+/* NOTIFICATIONS */
+app.get("/api/notifications",async(req,res)=>{
+  if(!needDb(res))return;
+  try{const result=await pool.query(`SELECT id,title,message,is_read,created_at FROM notifications WHERE (recipient_username=$1 OR recipient_role=$2) ORDER BY created_at DESC LIMIT 50`,[clean(req.query.username||""),clean(req.query.role||"")]);res.json({ok:true,notifications:result.rows});}
+  catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+app.patch("/api/notifications/:id/read",async(req,res)=>{
+  if(!needDb(res))return;
+  try{await pool.query(`UPDATE notifications SET is_read=TRUE WHERE id=$1`,[Number(req.params.id)]);res.json({ok:true});}
+  catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+/* AUDIT */
+app.get("/api/audit-logs",async(req,res)=>{
+  if(!needDb(res))return;
+  try{const result=await pool.query(`SELECT id,action,details,created_at FROM audit_logs ORDER BY created_at DESC,id DESC LIMIT 200`);res.json({ok:true,logs:result.rows});}
+  catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+/* EXPORT */
+app.get("/api/export/report.csv",async(req,res)=>{
+  if(!needDb(res))return;
+  try{
+    const result=await pool.query(`SELECT e.asset_code,e.name,e.brand,e.model,e.serial_number,e.room,e.calibration_date,e.due_date,CASE WHEN e.due_date IS NULL THEN 'UNKNOWN' WHEN e.due_date < CURRENT_DATE THEN 'EXPIRED' WHEN e.due_date < CURRENT_DATE + INTERVAL '31 days' THEN 'NEAR_DUE' ELSE 'VALID' END AS calibration_status FROM equipment e ORDER BY e.asset_code`);
+    const header=["Kode Aset","Nama Alat","Merk","Model","Nomor Seri","Ruangan","Tanggal Kalibrasi","Jatuh Tempo","Status"];
+    const csv=[header,...result.rows.map(r=>[r.asset_code,r.name,r.brand,r.model,r.serial_number,r.room,r.calibration_date,r.due_date,r.calibration_status])].map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\n");
+    res.setHeader("Content-Type","text/csv; charset=utf-8");res.setHeader("Content-Disposition",'attachment; filename="CALIBRA_RS_Report.csv"');res.send("\ufeff"+csv);
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
 app.get("/api/field-report", async (req, res) => {
   if (!needDb(res)) return;
 
