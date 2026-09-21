@@ -1288,10 +1288,11 @@ app.post("/api/actions", requireRole("PENANGGUNG JAWAB"), async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO actions (
-        report_id, equipment_id, title, description, assigned_to, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6)
+        hospital_id, report_id, equipment_id, title, description, assigned_to, created_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *`,
       [
+        req.hospitalId||0,
         Number(req.body.reportId),
         Number(req.body.equipmentId),
         clean(req.body.title),
@@ -1302,12 +1303,12 @@ app.post("/api/actions", requireRole("PENANGGUNG JAWAB"), async (req, res) => {
     );
     await pool.query(
       `INSERT INTO action_status_history (
-        action_id, from_status, to_status, changed_by
-      ) VALUES ($1,$2,$3,$4)`,
-      [result.rows[0].id, null, result.rows[0].status, clean(req.user.username)]
+        hospital_id, action_id, from_status, to_status, changed_by
+      ) VALUES ($1,$2,$3,$4,$5)`,
+      [req.hospitalId||0,result.rows[0].id, null, result.rows[0].status, clean(req.user.username)]
     );
-    await writeAudit("WORK_ORDER_CREATED",{actionId:result.rows[0].id,reportId:Number(req.body.reportId),equipmentId:Number(req.body.equipmentId)},req.user.username);
-    await notify("PENANGGUNG JAWAB","pj","Work Order dibuat","Work Order baru dibuat untuk alat ID "+Number(req.body.equipmentId)+".");
+    await writeAudit("WORK_ORDER_CREATED",{actionId:result.rows[0].id,reportId:Number(req.body.reportId),equipmentId:Number(req.body.equipmentId)},req.user.username,req.hospitalId);
+    await notify("PENANGGUNG JAWAB",null,"Work Order dibuat","Work Order baru dibuat untuk alat ID "+Number(req.body.equipmentId)+".",req.hospitalId);
     res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -1355,8 +1356,9 @@ app.get("/api/actions/all", async (req, res) => {
           ), '[]'::json) AS timeline
        FROM actions a
        LEFT JOIN equipment e ON e.id = a.equipment_id
+       WHERE a.hospital_id = $1
        ORDER BY a.created_at DESC
-       LIMIT 200`
+       LIMIT 200`,[req.hospitalId||0]
     );
     res.json({ ok: true, actions: result.rows });
   } catch (error) {
@@ -1368,8 +1370,8 @@ app.get("/api/actions/:reportId", async (req, res) => {
   if (!needDb(res)) return;
   try {
     const result = await pool.query(
-      `SELECT * FROM actions WHERE report_id = $1 ORDER BY created_at DESC`,
-      [Number(req.params.reportId)]
+      `SELECT * FROM actions WHERE report_id = $1 AND hospital_id = $2 ORDER BY created_at DESC`,
+      [Number(req.params.reportId),req.hospitalId||0]
     );
     res.json({ ok: true, actions: result.rows });
   } catch (error) {
@@ -1386,8 +1388,8 @@ app.patch("/api/actions/:id", requireRole("PENANGGUNG JAWAB"), async (req, res) 
       return res.status(400).json({ ok: false, error: "Status tindakan tidak valid." });
     }
     const current = await pool.query(
-      `SELECT id, status, created_by FROM actions WHERE id = $1`,
-      [Number(req.params.id)]
+      `SELECT id, status, created_by FROM actions WHERE id = $1 AND hospital_id = $2`,
+      [Number(req.params.id),req.hospitalId||0]
     );
     if (!current.rows.length) return res.status(404).json({ ok: false, error: "Tindakan tidak ditemukan." });
 
@@ -1401,8 +1403,8 @@ app.patch("/api/actions/:id", requireRole("PENANGGUNG JAWAB"), async (req, res) 
     }
 
     const result = await pool.query(
-      `UPDATE actions SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
-      [status, Number(req.params.id)]
+      `UPDATE actions SET status = $1, updated_at = NOW() WHERE id = $2 AND hospital_id = $3 RETURNING *`,
+      [status, Number(req.params.id),req.hospitalId||0]
     );
 
     const changedBy = clean(req.user.username);
@@ -1410,11 +1412,11 @@ app.patch("/api/actions/:id", requireRole("PENANGGUNG JAWAB"), async (req, res) 
       `INSERT INTO action_status_history (
         action_id, from_status, to_status, changed_by
       ) VALUES ($1,$2,$3,$4)`,
-      [Number(req.params.id), previousStatus, status, changedBy]
+      [req.hospitalId||0,Number(req.params.id), previousStatus, status, changedBy]
     );
 
-    await writeAudit("WORK_ORDER_STATUS_CHANGED",{actionId:Number(req.params.id),fromStatus:previousStatus,toStatus:status},changedBy);
-    await notify("PENANGGUNG JAWAB","pj","Work Order berubah","Status Work Order #"+Number(req.params.id)+" menjadi "+status+".");
+    await writeAudit("WORK_ORDER_STATUS_CHANGED",{actionId:Number(req.params.id),fromStatus:previousStatus,toStatus:status},changedBy,req.hospitalId);
+    await notify("PENANGGUNG JAWAB",null,"Work Order berubah","Status Work Order #"+Number(req.params.id)+" menjadi "+status+".",req.hospitalId);
     res.json({ ok: true, action: result.rows[0], serverTime: new Date().toISOString() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -1434,7 +1436,7 @@ app.get("/api/field-report/:id/stamped-evidence", async (req, res) => {
     const result = await pool.query(
       `SELECT id, mime_type, file_size, evidence_type, created_at
        FROM evidence_files
-       WHERE report_id = $1 AND evidence_type = 'STAMPED'
+       WHERE hospital_id=$2 AND report_id = $1 AND evidence_type = 'STAMPED'
        ORDER BY created_at DESC
        LIMIT 1`,
       [reportId]
@@ -1461,19 +1463,19 @@ app.post("/api/certificates",requireRole("PENANGGUNG JAWAB"),upload.single("file
     if (!allowedCertificateTypes.includes(req.file.mimetype)) {
       return res.status(400).json({ok:false,error:"Format sertifikat harus PDF, JPG, PNG, atau WEBP."});
     }
-    const result=await pool.query(`INSERT INTO certificate_files (equipment_id,original_name,mime_type,file_size,file_data,uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,equipment_id,original_name,mime_type,file_size,uploaded_by,created_at`,[equipmentId,req.file.originalname,req.file.mimetype,req.file.size,req.file.buffer,clean(req.user.username)]);
-    await writeAudit("CERTIFICATE_UPLOADED",{certificateId:result.rows[0].id,equipmentId},req.user.username);
+    const result=await pool.query(`INSERT INTO certificate_files (hospital_id,equipment_id,original_name,mime_type,file_size,file_data,uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,equipment_id,original_name,mime_type,file_size,uploaded_by,created_at`,[req.hospitalId||0,equipmentId,req.file.originalname,req.file.mimetype,req.file.size,req.file.buffer,clean(req.user.username)]);
+    await writeAudit("CERTIFICATE_UPLOADED",{certificateId:result.rows[0].id,equipmentId},req.user.username,req.hospitalId);
     res.json({ok:true,certificate:result.rows[0]});
   }catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 app.get("/api/certificates",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
-  try{const result=await pool.query(`SELECT c.id,c.equipment_id,e.asset_code,e.name AS equipment_name,c.original_name,c.mime_type,c.file_size,c.uploaded_by,c.created_at FROM certificate_files c LEFT JOIN equipment e ON e.id=c.equipment_id ORDER BY c.created_at DESC LIMIT 200`);res.json({ok:true,certificates:result.rows});}
+  try{const result=await pool.query(`SELECT c.id,c.equipment_id,e.asset_code,e.name AS equipment_name,c.original_name,c.mime_type,c.file_size,c.uploaded_by,c.created_at FROM certificate_files c LEFT JOIN equipment e ON e.id=c.equipment_id WHERE c.hospital_id=$1 ORDER BY c.created_at DESC LIMIT 200`,[req.hospitalId||0]);res.json({ok:true,certificates:result.rows});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 app.get("/api/certificates/:id",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
-  try{const result=await pool.query(`SELECT mime_type,original_name,file_data FROM certificate_files WHERE id=$1`,[Number(req.params.id)]);if(!result.rows.length)return res.status(404).json({ok:false,error:"Sertifikat tidak ditemukan."});res.setHeader("Content-Type",result.rows[0].mime_type);const safeFilename = String(result.rows[0].original_name || "certificate").replace(/[\r\n"]/g, "_").slice(0, 180);
+  try{const result=await pool.query(`SELECT mime_type,original_name,file_data FROM certificate_files WHERE id=$1 AND hospital_id=$2`,[Number(req.params.id),req.hospitalId||0]);if(!result.rows.length)return res.status(404).json({ok:false,error:"Sertifikat tidak ditemukan."});res.setHeader("Content-Type",result.rows[0].mime_type);const safeFilename = String(result.rows[0].original_name || "certificate").replace(/[\r\n"]/g, "_").slice(0, 180);
     res.setHeader("Content-Disposition",`inline; filename="${safeFilename}"`);res.send(result.rows[0].file_data);}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
@@ -1481,19 +1483,19 @@ app.get("/api/certificates/:id",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(
 /* NOTIFICATIONS */
 app.get("/api/notifications",async(req,res)=>{
   if(!needDb(res))return;
-  try{const result=await pool.query(`SELECT id,title,message,is_read,created_at FROM notifications WHERE (recipient_username=$1 OR recipient_role=$2) ORDER BY created_at DESC LIMIT 50`,[clean(req.user.username),clean(req.user.role)]);res.json({ok:true,notifications:result.rows});}
+  try{const result=await pool.query(`SELECT id,title,message,is_read,created_at FROM notifications WHERE hospital_id=$3 AND (recipient_username=$1 OR recipient_role=$2) ORDER BY created_at DESC LIMIT 50`,[clean(req.user.username),clean(req.user.role),req.hospitalId||0]);res.json({ok:true,notifications:result.rows});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 app.patch("/api/notifications/:id/read",async(req,res)=>{
   if(!needDb(res))return;
-  try{await pool.query(`UPDATE notifications SET is_read=TRUE WHERE id=$1 AND (recipient_username=$2 OR recipient_role=$3)`,[Number(req.params.id),clean(req.user.username),clean(req.user.role)]);res.json({ok:true});}
+  try{await pool.query(`UPDATE notifications SET is_read=TRUE WHERE id=$1 AND hospital_id=$4 AND (recipient_username=$2 OR recipient_role=$3)`,[Number(req.params.id),clean(req.user.username),clean(req.user.role),req.hospitalId||0]);res.json({ok:true});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 
 /* AUDIT */
 app.get("/api/audit-logs",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
-  try{const result=await pool.query(`SELECT id,action,details,created_at FROM audit_logs ORDER BY created_at DESC,id DESC LIMIT 200`);res.json({ok:true,logs:result.rows});}
+  try{const result=await pool.query(`SELECT id,action,details,created_at FROM audit_logs WHERE hospital_id=$1 ORDER BY created_at DESC,id DESC LIMIT 200`,[req.hospitalId||0]);res.json({ok:true,logs:result.rows});}
   catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 
@@ -1501,7 +1503,7 @@ app.get("/api/audit-logs",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,re
 app.get("/api/export/report.csv",requireRole("PENANGGUNG JAWAB","DIREKSI"),async(req,res)=>{
   if(!needDb(res))return;
   try{
-    const result=await pool.query(`SELECT e.asset_code,e.name,e.brand,e.model,e.serial_number,e.room,e.calibration_date,e.due_date,CASE WHEN e.due_date IS NULL THEN 'UNKNOWN' WHEN e.due_date < CURRENT_DATE THEN 'EXPIRED' WHEN e.due_date < CURRENT_DATE + INTERVAL '31 days' THEN 'NEAR_DUE' ELSE 'VALID' END AS calibration_status FROM equipment e ORDER BY e.asset_code`);
+    const result=await pool.query(`SELECT e.asset_code,e.name,e.brand,e.model,e.serial_number,e.room,e.calibration_date,e.due_date,CASE WHEN e.due_date IS NULL THEN 'UNKNOWN' WHEN e.due_date < CURRENT_DATE THEN 'EXPIRED' WHEN e.due_date < CURRENT_DATE + INTERVAL '31 days' THEN 'NEAR_DUE' ELSE 'VALID' END AS calibration_status FROM equipment e WHERE e.hospital_id=$1 ORDER BY e.asset_code`,[req.hospitalId||0]);
     const header=["Kode Aset","Nama Alat","Merk","Model","Nomor Seri","Ruangan","Tanggal Kalibrasi","Jatuh Tempo","Status"];
     const csv=[header,...result.rows.map(r=>[r.asset_code,r.name,r.brand,r.model,r.serial_number,r.room,r.calibration_date,r.due_date,r.calibration_status])].map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\n");
     res.setHeader("Content-Type","text/csv; charset=utf-8");res.setHeader("Content-Disposition",'attachment; filename="CALIBRA_RS_Report.csv"');res.send("\ufeff"+csv);
@@ -1527,15 +1529,16 @@ LEFT JOIN equipment e
 LEFT JOIN LATERAL (
   SELECT id
   FROM evidence_files
-  WHERE report_id = fr.id
+  WHERE hospital_id=$2 AND report_id = fr.id
   ORDER BY
     CASE WHEN evidence_type = 'STAMPED' THEN 0 ELSE 1 END,
     created_at DESC
   LIMIT 1
 ) ev ON true
+      WHERE fr.hospital_id=$1
       ORDER BY fr.created_at DESC
       LIMIT 100
-    `);
+    `,[req.hospitalId||0,req.hospitalId||0]);
 
     res.json({
       ok: true,
