@@ -12,9 +12,9 @@ const AUTH_SECRET = process.env.CALIBRA_AUTH_SECRET || process.env.DATABASE_URL 
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
 
 const AUTH_USERS = {
-  direksi: { password: process.env.CALIBRA_DIREKSI_PASSWORD || "calibra123", name: "Direksi", role: "DIREKSI" },
-  pj: { password: process.env.CALIBRA_PJ_PASSWORD || "calibra123", name: "Penanggung Jawab", role: "PENANGGUNG JAWAB" },
-  petugas: { password: process.env.CALIBRA_PETUGAS_PASSWORD || "calibra123", name: "Petugas Lapangan", role: "PETUGAS LAPANGAN" }
+  direksi: { password: process.env.CALIBRA_DIREKSI_PASSWORD || "calibra123", name: "Direksi", role: "DIREKSI", hospitalId: process.env.CALIBRA_DEMO_HOSPITAL_ID || null },
+  pj: { password: process.env.CALIBRA_PJ_PASSWORD || "calibra123", name: "Penanggung Jawab", role: "PENANGGUNG JAWAB", hospitalId: process.env.CALIBRA_DEMO_HOSPITAL_ID || null },
+  petugas: { password: process.env.CALIBRA_PETUGAS_PASSWORD || "calibra123", name: "Petugas Lapangan", role: "PETUGAS LAPANGAN", hospitalId: process.env.CALIBRA_DEMO_HOSPITAL_ID || null }
 };
 
 function base64Url(value) {
@@ -415,6 +415,7 @@ app.post("/api/login", (req, res) => {
     username,
     name: account.name,
     role: account.role,
+    hospitalId: account.hospitalId,
     iat: now,
     exp: now + AUTH_TTL_SECONDS
   });
@@ -422,7 +423,7 @@ app.post("/api/login", (req, res) => {
   res.json({
     ok: true,
     token,
-    user: { username, name: account.name, role: account.role },
+    user: { username, name: account.name, role: account.role, hospitalId: account.hospitalId },
     expiresAt: new Date((now + AUTH_TTL_SECONDS) * 1000).toISOString()
   });
 });
