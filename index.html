@@ -521,6 +521,10 @@ th{
             Mengecek...
           </div>
         </div>
+        <div class="stat">
+          <div class="label">Work Order Aktif</div>
+          <div id="statActions" class="value">-</div>
+        </div>
 
       </div>
 
@@ -1185,6 +1189,9 @@ async function loadDashboard(){
       .getElementById("statFindings")
       .textContent =
       data.openFindings ?? 0;
+
+    const actionStat=document.getElementById("statActions");
+    if(actionStat) actionStat.textContent=data.openActions ?? 0;
 
     renderRecent(data.recent || []);
 
