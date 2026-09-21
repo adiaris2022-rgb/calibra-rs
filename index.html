@@ -402,10 +402,13 @@ th{
 
 <header>
 
-  <div>
-    <div class="brand">CALIBRA RS</div>
-    <div class="subtitle">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <img id="hospitalLogo" class="hidden" style="width:48px;height:48px;object-fit:contain;border-radius:10px;border:1px solid #e5e7eb;background:#fff;padding:4px;">
+    <div>
+      <div class="brand">CALIBRA RS</div>
+    <div class="subtitle" id="hospitalNameHeader">
       Medical Equipment Control Tower
+    </div>
     </div>
   </div>
 
@@ -463,9 +466,65 @@ th{
     <button id="certificateNav" style="display:none;" onclick="showSection('certificates',this)">Sertifikat</button>
     <button id="notificationNav" onclick="showSection('notifications',this)">Notifikasi</button>
 <button id="auditNav" style="display:none;" onclick="showSection('audit',this)">Audit Log</button>
+    <button onclick="showSection('settings',this)">Pengaturan</button>
 
   </div>
 
+
+  <!-- SETTINGS -->
+  <section id="settings" class="section">
+    <h1 class="page-title">Pengaturan</h1>
+    <p class="page-desc">Kelola identitas Rumah Sakit, akun pengguna, dan keamanan akun.</p>
+
+    <div class="card">
+      <h3>Profil Saya</h3>
+      <div id="myProfile" class="notice blue">Memuat...</div>
+      <h4 style="margin-bottom:6px;">Ganti Password</h4>
+      <div class="form-grid">
+        <div><label>Password saat ini</label><input id="currentPassword" type="password"></div>
+        <div><label>Password baru</label><input id="newPassword" type="password" placeholder="Minimal 8 karakter"></div>
+        <div><label>Konfirmasi password baru</label><input id="confirmPassword" type="password"></div>
+      </div>
+      <div class="actions"><button class="primary" onclick="changeMyPassword()">Simpan Password</button></div>
+      <div id="passwordResult"></div>
+    </div>
+
+    <div id="rsAdminPanel" class="card" style="display:none;">
+      <h3>Identitas Rumah Sakit</h3>
+      <div class="form-grid">
+        <div><label>Nama Rumah Sakit</label><input id="hospitalName"></div>
+        <div><label>Kode Rumah Sakit</label><input id="hospitalCode"></div>
+        <div><label>Alamat</label><input id="hospitalAddress"></div>
+        <div><label>Kota</label><input id="hospitalCity"></div>
+        <div><label>Telepon</label><input id="hospitalPhone"></div>
+        <div><label>Email</label><input id="hospitalEmail" type="email"></div>
+      </div>
+      <div class="actions">
+        <button class="primary" onclick="saveHospitalSettings()">Simpan Identitas RS</button>
+        <label style="display:inline-flex;align-items:center;gap:8px;margin:0;">
+          <input id="hospitalLogoFile" type="file" accept="image/png,image/jpeg,image/webp" style="width:auto;">
+        </label>
+        <button class="secondary" onclick="uploadHospitalLogo()">Upload Logo</button>
+      </div>
+      <div id="hospitalResult"></div>
+    </div>
+
+    <div id="userAdminPanel" class="card" style="display:none;">
+      <h3>Manajemen User RS</h3>
+      <div class="notice blue">Admin utama: <b>Admin IPSRS / Penanggung Jawab</b>. User membuat password sendiri setelah akun diberikan; untuk MVP admin membuat password awal yang dapat langsung diganti user.</div>
+      <div class="form-grid">
+        <div><label>Username</label><input id="newUsername"></div>
+        <div><label>Email</label><input id="newUserEmail" type="email"></div>
+        <div><label>Nama</label><input id="newUserName"></div>
+        <div><label>Departemen</label><input id="newUserDepartment" value="IPSRS"></div>
+        <div><label>Role</label><select id="newUserRole"><option>DIREKSI</option><option>PENANGGUNG JAWAB</option><option>PETUGAS LAPANGAN</option><option>TEKNISI</option></select></div>
+        <div><label>Password awal</label><input id="newUserPassword" type="password" placeholder="Minimal 8 karakter"></div>
+      </div>
+      <div class="actions"><button class="primary" onclick="createHospitalUser()">Tambah User</button></div>
+      <div id="userResult"></div>
+      <div id="userList"></div>
+    </div>
+  </section>
 
   <!-- DASHBOARD -->
   <section id="dashboard" class="section active">
@@ -1023,6 +1082,141 @@ async function login(){
 }
 
 /* =========================
+   IDENTITY / SETTINGS
+========================= */
+
+async function loadIdentity(){
+  try{
+    const response=await fetch("/api/me",{cache:"no-store"});
+    const data=await response.json();
+    if(!response.ok||!data.ok) throw new Error(data.error||"Gagal mengambil profil.");
+    const u=data.user;
+    currentUser=Object.assign({},currentUser,{
+      id:u.id,username:u.username,email:u.email,name:u.name,role:u.role,department:u.department,hospitalId:u.hospital_id
+    });
+    localStorage.setItem("calibraUser",JSON.stringify(currentUser));
+
+    const profile=document.getElementById("myProfile");
+    if(profile) profile.innerHTML="<b>"+escapeHtml(u.name)+"</b><br>Username: "+escapeHtml(u.username)+"<br>Email: "+escapeHtml(u.email||"-")+"<br>Role: "+escapeHtml(u.role)+"<br>Departemen: "+escapeHtml(u.department||"-")+"<br>Rumah Sakit: "+escapeHtml(u.hospital_name||"-");
+
+    const h=await fetch("/api/hospital",{cache:"no-store"});
+    const hd=await h.json();
+    if(h.ok&&hd.ok){
+      const x=hd.hospital;
+      const hn=document.getElementById("hospitalNameHeader");
+      if(hn) hn.textContent=x.name||"Medical Equipment Control Tower";
+      const logo=document.getElementById("hospitalLogo");
+      if(logo&&x.logo_url){logo.src=x.logo_url+"?t="+Date.now();logo.classList.remove("hidden");}
+      if(currentUser.role==="PENANGGUNG JAWAB"){
+        document.getElementById("rsAdminPanel").style.display="";
+        document.getElementById("userAdminPanel").style.display="";
+        document.getElementById("hospitalName").value=x.name||"";
+        document.getElementById("hospitalCode").value=x.code||"";
+        document.getElementById("hospitalAddress").value=x.address||"";
+        document.getElementById("hospitalCity").value=x.city||"";
+        document.getElementById("hospitalPhone").value=x.phone||"";
+        document.getElementById("hospitalEmail").value=x.email||"";
+        loadHospitalUsers();
+      }
+    }
+  }catch(error){
+    const p=document.getElementById("myProfile");
+    if(p) p.innerHTML='<div class="notice orange">'+escapeHtml(error.message)+'</div>';
+  }
+}
+
+async function changeMyPassword(){
+  const current=document.getElementById("currentPassword").value;
+  const next=document.getElementById("newPassword").value;
+  const confirm=document.getElementById("confirmPassword").value;
+  const out=document.getElementById("passwordResult");
+  if(next!==confirm){out.innerHTML='<div class="notice orange">Konfirmasi password tidak sama.</div>';return;}
+  try{
+    const r=await fetch("/api/me/password",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({currentPassword:current,newPassword:next})});
+    const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.error||"Gagal mengubah password.");
+    out.innerHTML='<div class="notice green">'+escapeHtml(d.message)+'</div>';
+    document.getElementById("currentPassword").value="";
+    document.getElementById("newPassword").value="";
+    document.getElementById("confirmPassword").value="";
+  }catch(error){out.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
+}
+
+async function saveHospitalSettings(){
+  const payload={
+    name:document.getElementById("hospitalName").value.trim(),
+    code:document.getElementById("hospitalCode").value.trim(),
+    address:document.getElementById("hospitalAddress").value.trim(),
+    city:document.getElementById("hospitalCity").value.trim(),
+    phone:document.getElementById("hospitalPhone").value.trim(),
+    email:document.getElementById("hospitalEmail").value.trim()
+  };
+  const out=document.getElementById("hospitalResult");
+  try{
+    const r=await fetch("/api/hospital",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.error||"Gagal menyimpan identitas RS.");
+    out.innerHTML='<div class="notice green">Identitas Rumah Sakit berhasil disimpan.</div>';
+    loadIdentity();
+  }catch(error){out.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
+}
+
+async function uploadHospitalLogo(){
+  const input=document.getElementById("hospitalLogoFile");
+  const out=document.getElementById("hospitalResult");
+  if(!input.files.length){out.innerHTML='<div class="notice orange">Pilih file logo terlebih dahulu.</div>';return;}
+  const fd=new FormData(); fd.append("logo",input.files[0],input.files[0].name);
+  try{
+    const r=await fetch("/api/hospital/logo",{method:"POST",body:fd});
+    const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.error||"Gagal upload logo.");
+    out.innerHTML='<div class="notice green">Logo Rumah Sakit berhasil diperbarui.</div>';
+    loadIdentity();
+  }catch(error){out.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
+}
+
+async function loadHospitalUsers(){
+  const box=document.getElementById("userList");
+  if(!box)return;
+  try{
+    const r=await fetch("/api/users",{cache:"no-store"}); const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.error||"Gagal mengambil user.");
+    box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Nama</th><th>Username</th><th>Role</th><th>Departemen</th><th>Status</th><th>Last Login</th><th>Aksi</th></tr></thead><tbody>'+
+      d.users.map(function(u){return '<tr><td>'+escapeHtml(u.name)+'</td><td>'+escapeHtml(u.username)+'</td><td>'+escapeHtml(u.role)+'</td><td>'+escapeHtml(u.department||"-")+'</td><td>'+escapeHtml(u.status)+'</td><td>'+escapeHtml(formatDate(u.last_login_at))+'</td><td><button class="secondary" onclick="toggleHospitalUser('+Number(u.id)+','+(u.status==="ACTIVE"?'false':'true')+')">'+(u.status==="ACTIVE"?"Nonaktifkan":"Aktifkan")+'</button></td></tr>';}).join("")+
+      '</tbody></table></div>';
+  }catch(error){box.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
+}
+
+async function createHospitalUser(){
+  const payload={
+    username:document.getElementById("newUsername").value.trim(),
+    email:document.getElementById("newUserEmail").value.trim(),
+    name:document.getElementById("newUserName").value.trim(),
+    department:document.getElementById("newUserDepartment").value.trim(),
+    role:document.getElementById("newUserRole").value,
+    password:document.getElementById("newUserPassword").value
+  };
+  const out=document.getElementById("userResult");
+  try{
+    const r=await fetch("/api/users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.error||"Gagal membuat user.");
+    out.innerHTML='<div class="notice green">User berhasil dibuat. User dapat mengganti password dari menu Pengaturan.</div>';
+    ["newUsername","newUserEmail","newUserName","newUserPassword"].forEach(id=>document.getElementById(id).value="");
+    loadHospitalUsers();
+  }catch(error){out.innerHTML='<div class="notice red">'+escapeHtml(error.message)+'</div>';}
+}
+
+async function toggleHospitalUser(id,enable){
+  try{
+    const r=await fetch("/api/users/"+id+"/status",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:enable?"ACTIVE":"DISABLED"})});
+    const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.error||"Gagal mengubah status user.");
+    loadHospitalUsers();
+  }catch(error){alert(error.message);}
+}
+
+/* =========================
    SHOW APP
 ========================= */
 
@@ -1060,6 +1254,7 @@ function showApp(){
   loadDashboard();
   loadNotifications();
   startNotificationRealtime();
+  loadIdentity();
 
 }
 
@@ -1139,6 +1334,9 @@ if(id === "workorders"){
   if(id === "audit"){
     if(!currentUser || (currentUser.username!=="pj" && currentUser.username!=="direksi")) return;
     loadAuditLogs();
+  }
+  if(id === "settings"){
+    loadIdentity();
   }
 }
 
