@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 const AUTH_SECRET = process.env.CALIBRA_AUTH_SECRET || process.env.DATABASE_URL || "calibra-demo-secret-change-in-production";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
-const REQUIRE_TENANT = process.env.CALIBRA_REQUIRE_TENANT === "true";
+const REQUIRE_TENANT = process.env.CALIBRA_REQUIRE_TENANT !== "false";
 const ADMIN_RS_ROLE = "PENANGGUNG JAWAB";
 
 const AUTH_USERS = {
@@ -47,7 +47,7 @@ function verifyToken(token) {
   }
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   if (req.path === "/health" || req.path === "/login") return next();
   const header = clean(req.headers.authorization || "");
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -55,8 +55,17 @@ function requireAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ ok: false, error: "Sesi tidak valid atau sudah berakhir. Silakan login kembali." });
   }
-  req.user = user;
   if (user.hospitalId) req.hospitalId = Number(user.hospitalId);
+  if (pool && dbReady && user.username) {
+    try {
+      const r = await pool.query("SELECT status, hospital_id FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1", [user.username]);
+      if (r.rows.length) {
+        if (r.rows[0].status !== "ACTIVE") return res.status(401).json({ok:false,error:"Akun tidak aktif. Silakan hubungi Admin IPSRS."});
+        if (r.rows[0].hospital_id) req.hospitalId = Number(r.rows[0].hospital_id);
+      }
+    } catch (error) { console.error("Session user check gagal:",error.message); }
+  }
+  req.user = {...user,hospitalId:req.hospitalId||user.hospitalId||null};
   next();
 }
 
@@ -285,6 +294,7 @@ async function initDb() {
 
     CREATE TABLE IF NOT EXISTS inspections (
       id SERIAL PRIMARY KEY,
+      hospital_id INTEGER REFERENCES hospitals(id),
       equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
       condition TEXT,
       findings TEXT,
@@ -293,6 +303,7 @@ async function initDb() {
 
     CREATE TABLE IF NOT EXISTS field_reports (
       id SERIAL PRIMARY KEY,
+      hospital_id INTEGER REFERENCES hospitals(id),
       equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
       report TEXT NOT NULL,
       status TEXT DEFAULT 'OPEN',
@@ -300,6 +311,7 @@ async function initDb() {
     );
 CREATE TABLE IF NOT EXISTS evidence_files (
   id SERIAL PRIMARY KEY,
+  hospital_id INTEGER REFERENCES hospitals(id),
   equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
   report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE,
   original_name TEXT,
@@ -336,11 +348,28 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE field_reports ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE evidence_files ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE actions ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE action_status_history ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE certificate_files ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE calibrations ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE equipment_identifiers ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
   await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`UPDATE inspections i SET hospital_id=e.hospital_id FROM equipment e WHERE i.equipment_id=e.id AND i.hospital_id IS NULL`);
+  await pool.query(`UPDATE field_reports r SET hospital_id=e.hospital_id FROM equipment e WHERE r.equipment_id=e.id AND r.hospital_id IS NULL`);
+  await pool.query(`UPDATE evidence_files ev SET hospital_id=e.hospital_id FROM equipment e WHERE ev.equipment_id=e.id AND ev.hospital_id IS NULL`);
+  await pool.query(`UPDATE actions a SET hospital_id=e.hospital_id FROM equipment e WHERE a.equipment_id=e.id AND a.hospital_id IS NULL`);
+  await pool.query(`UPDATE action_status_history h SET hospital_id=a.hospital_id FROM actions a WHERE h.action_id=a.id AND h.hospital_id IS NULL`);
+  await pool.query(`UPDATE certificate_files c SET hospital_id=e.hospital_id FROM equipment e WHERE c.equipment_id=e.id AND c.hospital_id IS NULL`);
+  await pool.query(`UPDATE calibrations c SET hospital_id=e.hospital_id FROM equipment e WHERE c.equipment_id=e.id AND c.hospital_id IS NULL`);
+  await pool.query(`UPDATE equipment_identifiers i SET hospital_id=e.hospital_id FROM equipment e WHERE i.equipment_id=e.id AND i.hospital_id IS NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS actions (
       id SERIAL PRIMARY KEY,
+      hospital_id INTEGER REFERENCES hospitals(id),
       report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE,
       equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
@@ -356,6 +385,7 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   await pool.query(`
     CREATE TABLE IF NOT EXISTS action_status_history (
       id SERIAL PRIMARY KEY,
+      hospital_id INTEGER REFERENCES hospitals(id),
       action_id INTEGER REFERENCES actions(id) ON DELETE CASCADE,
       from_status TEXT,
       to_status TEXT NOT NULL,
@@ -365,6 +395,7 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   `);
   await pool.query(`CREATE TABLE IF NOT EXISTS certificate_files (
     id SERIAL PRIMARY KEY,
+    hospital_id INTEGER REFERENCES hospitals(id),
     equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
     original_name TEXT,
     mime_type TEXT NOT NULL,
