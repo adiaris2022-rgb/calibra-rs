@@ -285,6 +285,9 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     ADD COLUMN IF NOT EXISTS officer_username TEXT
   `);
 
+  await pool.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+  await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS actions (
       id SERIAL PRIMARY KEY,
@@ -322,6 +325,7 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS notifications (
     id SERIAL PRIMARY KEY,
+    hospital_id INTEGER REFERENCES hospitals(id),
     recipient_role TEXT,
     recipient_username TEXT,
     title TEXT NOT NULL,
@@ -381,6 +385,8 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     ON CONFLICT (code) DO NOTHING
   `);
 
+  await pool.query(`UPDATE equipment SET hospital_id = (SELECT id FROM hospitals WHERE code = 'RS-DEMO') WHERE hospital_id IS NULL`);
+
   dbReady = true;
   console.log("Database siap");
 }
@@ -397,19 +403,19 @@ function needDb(res) {
   return true;
 }
 
-async function writeAudit(action, details, actor) {
+async function writeAudit(action, details, actor, hospitalId) {
   if (!pool || !dbReady) return;
   try {
-    await pool.query(`INSERT INTO audit_logs (action, details) VALUES ($1,$2)`,
-      [clean(action), JSON.stringify({ ...(details || {}), actor: clean(actor || "") })]);
+    await pool.query(`INSERT INTO audit_logs (hospital_id, action, details) VALUES ($1,$2,$3)`,
+      [hospitalId || null, clean(action), JSON.stringify({ ...(details || {}), actor: clean(actor || "") })]);
   } catch (error) { console.error("Audit log gagal:", error.message); }
 }
 
-async function notify(recipientRole, recipientUsername, title, message) {
+async function notify(recipientRole, recipientUsername, title, message, hospitalId) {
   if (!pool || !dbReady) return;
   try {
-    await pool.query(`INSERT INTO notifications (recipient_role, recipient_username, title, message) VALUES ($1,$2,$3,$4)`,
-      [clean(recipientRole), clean(recipientUsername), clean(title), clean(message)]);
+    await pool.query(`INSERT INTO notifications (hospital_id, recipient_role, recipient_username, title, message) VALUES ($1,$2,$3,$4,$5)`,
+      [hospitalId || null, clean(recipientRole), clean(recipientUsername), clean(title), clean(message)]);
   } catch (error) { console.error("Notification gagal:", error.message); }
 }
 
