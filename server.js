@@ -54,6 +54,7 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ ok: false, error: "Sesi tidak valid atau sudah berakhir. Silakan login kembali." });
   }
   req.user = user;
+  if (user.hospitalId) req.hospitalId = Number(user.hospitalId);
   next();
 }
 
@@ -529,9 +530,10 @@ app.get("/api/equipment", async (req, res) => {
           ELSE 'VALID'
         END AS calibration_status
       FROM equipment
+      WHERE ($1::int IS NULL OR hospital_id = $1)
       ORDER BY id DESC
       LIMIT 500
-    `);
+    `, [req.hospitalId || null]);
 
     res.json({
       ok: true,
