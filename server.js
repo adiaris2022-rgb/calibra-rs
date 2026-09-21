@@ -728,10 +728,11 @@ app.get("/api/dashboard", async (req, res) => {
         COUNT(*) FILTER (
           WHERE due_date < CURRENT_DATE
         )::int AS expired,
-        (SELECT COUNT(*)::int FROM field_reports WHERE status = 'OPEN') AS open_findings,
-        (SELECT COUNT(*)::int FROM actions WHERE status NOT IN ('CLOSED')) AS open_actions
+        (SELECT COUNT(*)::int FROM field_reports WHERE status = 'OPEN' AND hospital_id = $1) AS open_findings,
+        (SELECT COUNT(*)::int FROM actions WHERE status NOT IN ('CLOSED') AND hospital_id = $1) AS open_actions
       FROM equipment
-    `);
+      WHERE hospital_id = $1
+    `,[req.hospitalId||0]);
 
     const r = result.rows[0];
 
@@ -854,7 +855,8 @@ app.post("/api/import-excel/confirm", requireRole("PENANGGUNG JAWAB"), upload.si
     });
 
     const hospital = await pool.query(
-      "SELECT id FROM hospitals WHERE code = 'RS-DEMO'"
+      "SELECT id FROM hospitals WHERE id = $1",
+      [req.hospitalId||0]
     );
 
     const hospitalId = hospital.rows[0].id;
@@ -955,9 +957,9 @@ app.get("/api/equipment/:code/qr", async (req, res) => {
     const result = await pool.query(
       `SELECT id, asset_code, name
        FROM equipment
-       WHERE asset_code = $1
+       WHERE asset_code = $1 AND hospital_id = $2
        LIMIT 1`,
-      [code]
+      [code,req.hospitalId||0]
     );
 
     if (!result.rows.length) {
@@ -1002,8 +1004,8 @@ app.post("/api/equipment/:id/qr", requireRole("PENANGGUNG JAWAB"), async (req, r
 
   try {
     const equipment = await pool.query(
-      "SELECT id, asset_code, name FROM equipment WHERE id = $1",
-      [id]
+      "SELECT id, asset_code, name FROM equipment WHERE id = $1 AND hospital_id = $2",
+      [id,req.hospitalId||0]
     );
 
     if (!equipment.rows.length) {
@@ -1066,19 +1068,13 @@ app.post("/api/inspection", requireRole("PETUGAS LAPANGAN", "PENANGGUNG JAWAB"),
   if (!needDb(res)) return;
 
   try {
+    const equipment = await pool.query("SELECT id FROM equipment WHERE id=$1 AND hospital_id=$2 LIMIT 1",[Number(req.body.equipmentId),req.hospitalId||0]);
+    if(!equipment.rows.length) return res.status(404).json({ok:false,error:"Alat tidak ditemukan pada tenant ini."});
     const result = await pool.query(`
-      INSERT INTO inspections (
-        equipment_id,
-        condition,
-        findings
-      )
-      VALUES ($1,$2,$3)
+      INSERT INTO inspections (hospital_id,equipment_id,condition,findings)
+      VALUES ($1,$2,$3,$4)
       RETURNING *
-    `, [
-      Number(req.body.equipmentId),
-      clean(req.body.condition || "BAIK"),
-      clean(req.body.findings)
-    ]);
+    `,[req.hospitalId||0,Number(req.body.equipmentId),clean(req.body.condition || "BAIK"),clean(req.body.findings)]);
 
     res.json({
       ok: true,
@@ -1098,22 +1094,16 @@ app.post("/api/field-report", requireRole("PETUGAS LAPANGAN", "PENANGGUNG JAWAB"
   if (!needDb(res)) return;
 
   try {
+    const equipment = await pool.query("SELECT id FROM equipment WHERE id=$1 AND hospital_id=$2 LIMIT 1",[Number(req.body.equipmentId),req.hospitalId||0]);
+    if(!equipment.rows.length) return res.status(404).json({ok:false,error:"Alat tidak ditemukan pada tenant ini."});
     const result = await pool.query(`
-      INSERT INTO field_reports (
-        equipment_id,
-        report,
-        officer_username
-      )
-      VALUES ($1,$2,$3)
+      INSERT INTO field_reports (hospital_id,equipment_id,report,officer_username)
+      VALUES ($1,$2,$3,$4)
       RETURNING *
-    `, [
-      Number(req.body.equipmentId),
-      clean(req.body.report),
-      clean(req.user.username)
-    ]);
+    `,[req.hospitalId||0,Number(req.body.equipmentId),clean(req.body.report),clean(req.user.username)]);
 
-    await writeAudit("FIELD_REPORT_CREATED",{reportId:result.rows[0].id,equipmentId:Number(req.body.equipmentId)},req.user.username);
-    await notify("PENANGGUNG JAWAB","pj","Laporan lapangan baru","Laporan baru masuk untuk alat ID "+Number(req.body.equipmentId)+".");
+    await writeAudit("FIELD_REPORT_CREATED",{reportId:result.rows[0].id,equipmentId:Number(req.body.equipmentId)},req.user.username,req.hospitalId);
+    await notify("PENANGGUNG JAWAB",null,"Laporan lapangan baru","Laporan baru masuk untuk alat ID "+Number(req.body.equipmentId)+".",req.hospitalId);
     res.json({
       ok: true,
       report: result.rows[0],
@@ -1143,6 +1133,8 @@ app.post(
 
       const reportId =
         Number(req.body.reportId);
+      const ownership = await pool.query("SELECT e.id FROM equipment e JOIN field_reports fr ON fr.id=$2 AND fr.equipment_id=e.id WHERE e.id=$1 AND e.hospital_id=$3 AND fr.hospital_id=$3 LIMIT 1",[equipmentId,reportId,req.hospitalId||0]);
+      if(!ownership.rows.length) return res.status(404).json({ok:false,error:"Alat atau laporan tidak berada pada tenant ini."});
 
       if (!equipmentId || !reportId) {
         return res.status(400).json({
@@ -1169,6 +1161,7 @@ app.post(
       const result = await pool.query(
         `
         INSERT INTO evidence_files (
+          hospital_id,
           equipment_id,
           report_id,
           evidence_type,
@@ -1177,7 +1170,7 @@ app.post(
           file_size,
           file_data
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         RETURNING
           id,
           equipment_id,
@@ -1188,6 +1181,7 @@ app.post(
           created_at
         `,
         [
+          req.hospitalId||0,
           equipmentId,
           reportId,
           clean(req.body.evidenceType || "ORIGINAL").toUpperCase(),
@@ -1198,7 +1192,7 @@ app.post(
         ]
       );
 
-      await writeAudit("EVIDENCE_UPLOADED",{evidenceId:result.rows[0].id,reportId,equipmentId,evidenceType:clean(req.body.evidenceType||"ORIGINAL").toUpperCase()},req.user.username);
+      await writeAudit("EVIDENCE_UPLOADED",{evidenceId:result.rows[0].id,reportId,equipmentId,evidenceType:clean(req.body.evidenceType||"ORIGINAL").toUpperCase()},req.user.username,req.hospitalId);
       res.json({
         ok: true,
         evidence: result.rows[0],
@@ -1239,12 +1233,12 @@ app.get("/api/evidence/:id", async (req, res) => {
         file_data,
         evidence_type
       FROM evidence_files
-      WHERE id = $1
+      WHERE hospital_id = $2 AND id = $1
          OR (
            report_id = (
              SELECT report_id
              FROM evidence_files
-             WHERE id = $1
+             WHERE hospital_id = $2 AND id = $1
              LIMIT 1
            )
            AND evidence_type = 'STAMPED'
@@ -1254,7 +1248,7 @@ app.get("/api/evidence/:id", async (req, res) => {
         created_at DESC
       LIMIT 1
       `,
-      [id]
+      [id,req.hospitalId||0]
     );
 
     if (!result.rows.length) {
