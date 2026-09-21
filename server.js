@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 const AUTH_SECRET = process.env.CALIBRA_AUTH_SECRET || process.env.DATABASE_URL || "calibra-demo-secret-change-in-production";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
 const REQUIRE_TENANT = process.env.CALIBRA_REQUIRE_TENANT === "true";
+const ADMIN_RS_ROLE = "PENANGGUNG JAWAB";
 
 const AUTH_USERS = {
   direksi: { password: process.env.CALIBRA_DIREKSI_PASSWORD || "calibra123", name: "Direksi", role: "DIREKSI", hospitalId: process.env.CALIBRA_DEMO_HOSPITAL_ID || null },
@@ -126,6 +127,23 @@ function clean(v) {
   return String(v ?? "").trim();
 }
 
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return { salt, hash };
+}
+
+function verifyPassword(password, storedHash, salt) {
+  if (!storedHash || !salt) return false;
+  const actual = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  const a = Buffer.from(actual, "hex");
+  const b = Buffer.from(storedHash, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function isRsAdmin(user) {
+  return !!user && user.role === ADMIN_RS_ROLE;
+}
+
 function dateValue(v) {
   if (!v) return null;
 
@@ -203,7 +221,30 @@ async function initDb() {
       id SERIAL PRIMARY KEY,
       code TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      address TEXT,
+      city TEXT,
+      phone TEXT,
+      email TEXT,
+      logo_mime TEXT,
+      logo_data BYTEA,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      hospital_id INTEGER REFERENCES hospitals(id) ON DELETE CASCADE,
+      username TEXT UNIQUE NOT NULL,
+      email TEXT,
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      department TEXT,
+      status TEXT DEFAULT 'ACTIVE',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      last_login_at TIMESTAMPTZ
     );
 
     CREATE TABLE IF NOT EXISTS equipment (
@@ -285,6 +326,15 @@ CREATE TABLE IF NOT EXISTS evidence_files (
     ADD COLUMN IF NOT EXISTS officer_username TEXT
   `);
 
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS address TEXT`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS city TEXT`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS phone TEXT`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS email TEXT`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS logo_mime TEXT`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS logo_data BYTEA`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
   await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
 
@@ -387,6 +437,26 @@ CREATE TABLE IF NOT EXISTS evidence_files (
 
   await pool.query(`UPDATE equipment SET hospital_id = (SELECT id FROM hospitals WHERE code = 'RS-DEMO') WHERE hospital_id IS NULL`);
 
+  const demoHospital = await pool.query(`SELECT id FROM hospitals WHERE code = 'RS-DEMO' LIMIT 1`);
+  if (demoHospital.rows[0]) {
+    const hid = demoHospital.rows[0].id;
+    const demoUsers = [
+      { username: "direksi", email: "direksi@rs-demo.local", name: "Direksi", role: "DIREKSI", department: "Manajemen", password: process.env.CALIBRA_DIREKSI_PASSWORD || "calibra123" },
+      { username: "pj", email: "ipsrs@rs-demo.local", name: "Admin IPSRS / Penanggung Jawab", role: "PENANGGUNG JAWAB", department: "IPSRS", password: process.env.CALIBRA_PJ_PASSWORD || "calibra123" },
+      { username: "petugas", email: "petugas@rs-demo.local", name: "Petugas Lapangan", role: "PETUGAS LAPANGAN", department: "IPSRS", password: process.env.CALIBRA_PETUGAS_PASSWORD || "calibra123" }
+    ];
+    for (const u of demoUsers) {
+      const existing = await pool.query(`SELECT id FROM users WHERE username = $1 LIMIT 1`, [u.username]);
+      if (!existing.rows.length) {
+        const hp = hashPassword(u.password);
+        await pool.query(`
+          INSERT INTO users (hospital_id,username,email,password_hash,password_salt,name,role,department,status)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE')
+        `, [hid,u.username,u.email,hp.hash,hp.salt,u.name,u.role,u.department]);
+      }
+    }
+  }
+
   dbReady = true;
   console.log("Database siap");
 }
@@ -420,31 +490,149 @@ async function notify(recipientRole, recipientUsername, title, message, hospital
 }
 
 /* AUTH */
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   const username = clean(req.body?.username).toLowerCase();
   const password = String(req.body?.password || "");
-  const account = AUTH_USERS[username];
+  let account = null;
 
-  if (!account || account.password !== password) {
-    return res.status(401).json({ ok: false, error: "Username atau password salah." });
+  if (pool && dbReady) {
+    try {
+      const result = await pool.query(`
+        SELECT id, username, email, password_hash, password_salt, name, role, hospital_id, department, status
+        FROM users WHERE LOWER(username) = $1 LIMIT 1
+      `, [username]);
+      const u = result.rows[0];
+      if (u && u.status === "ACTIVE" && verifyPassword(password, u.password_hash, u.password_salt)) {
+        account = { id:u.id, username:u.username, email:u.email, name:u.name, role:u.role, hospitalId:u.hospital_id, department:u.department };
+        await pool.query(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, [u.id]);
+      }
+    } catch (error) {
+      console.error("DB login gagal:", error.message);
+    }
+  }
+
+  if (!account) {
+    const demo = AUTH_USERS[username];
+    if (!demo || demo.password !== password) {
+      return res.status(401).json({ ok: false, error: "Username atau password salah." });
+    }
+    account = { username, name: demo.name, role: demo.role, hospitalId: demo.hospitalId || null, department: null };
   }
 
   const now = Math.floor(Date.now() / 1000);
   const token = signToken({
-    username,
-    name: account.name,
-    role: account.role,
-    hospitalId: account.hospitalId,
-    iat: now,
-    exp: now + AUTH_TTL_SECONDS
+    username: account.username, name: account.name, role: account.role,
+    hospitalId: account.hospitalId, department: account.department,
+    iat: now, exp: now + AUTH_TTL_SECONDS
   });
 
-  res.json({
-    ok: true,
-    token,
-    user: { username, name: account.name, role: account.role, hospitalId: account.hospitalId },
-    expiresAt: new Date((now + AUTH_TTL_SECONDS) * 1000).toISOString()
-  });
+  res.json({ ok:true, token, user:account, expiresAt:new Date((now + AUTH_TTL_SECONDS)*1000).toISOString() });
+});
+
+/* IDENTITY / USER & HOSPITAL SETTINGS */
+app.get("/api/me", async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  try{
+    const r=await pool.query(`
+      SELECT u.id,u.username,u.email,u.name,u.role,u.department,u.status,u.last_login_at,
+             h.id AS hospital_id,h.code AS hospital_code,h.name AS hospital_name,h.address,h.city,h.phone,h.email AS hospital_email,
+             CASE WHEN h.logo_data IS NOT NULL THEN '/api/hospital/logo' ELSE NULL END AS logo_url
+      FROM users u LEFT JOIN hospitals h ON h.id=u.hospital_id
+      WHERE u.username=$1 LIMIT 1`,[req.user.username]);
+    if(!r.rows.length) return res.status(404).json({ok:false,error:"User tidak ditemukan."});
+    res.json({ok:true,user:r.rows[0]});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+app.patch("/api/me/password", async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  const current=String(req.body?.currentPassword||""), next=String(req.body?.newPassword||"");
+  if(next.length<8) return res.status(400).json({ok:false,error:"Password baru minimal 8 karakter."});
+  try{
+    const r=await pool.query(`SELECT id,password_hash,password_salt FROM users WHERE username=$1 LIMIT 1`,[req.user.username]);
+    const u=r.rows[0];
+    if(!u || !verifyPassword(current,u.password_hash,u.password_salt)) return res.status(400).json({ok:false,error:"Password saat ini salah."});
+    const hp=hashPassword(next);
+    await pool.query(`UPDATE users SET password_hash=$1,password_salt=$2,updated_at=NOW() WHERE id=$3`,[hp.hash,hp.salt,u.id]);
+    await writeAudit("CHANGE_PASSWORD",{username:req.user.username},req.user.username,req.hospitalId);
+    res.json({ok:true,message:"Password berhasil diubah."});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+app.get("/api/hospital", async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  try{
+    const r=await pool.query(`SELECT id,code,name,address,city,phone,email,CASE WHEN logo_data IS NOT NULL THEN '/api/hospital/logo' ELSE NULL END AS logo_url FROM hospitals WHERE id=$1 LIMIT 1`,[req.hospitalId||0]);
+    if(!r.rows.length) return res.status(404).json({ok:false,error:"Rumah sakit tidak ditemukan."});
+    res.json({ok:true,hospital:r.rows[0]});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+app.patch("/api/hospital", requireRole("PENANGGUNG JAWAB"), async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  const {name,code,address,city,phone,email}=req.body||{};
+  if(!clean(name)) return res.status(400).json({ok:false,error:"Nama rumah sakit wajib diisi."});
+  try{
+    const r=await pool.query(`UPDATE hospitals SET name=$1,code=$2,address=$3,city=$4,phone=$5,email=$6,updated_at=NOW() WHERE id=$7 RETURNING id,code,name,address,city,phone,email`,[clean(name),clean(code)||"RS-DEMO",clean(address),clean(city),clean(phone),clean(email),req.hospitalId||0]);
+    if(!r.rows.length) return res.status(404).json({ok:false,error:"Rumah sakit tidak ditemukan."});
+    await writeAudit("UPDATE_HOSPITAL",r.rows[0],req.user.username,req.hospitalId);
+    res.json({ok:true,hospital:r.rows[0]});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+app.post("/api/hospital/logo", requireRole("PENANGGUNG JAWAB"), upload.single("logo"), async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  if(!req.file) return res.status(400).json({ok:false,error:"Logo belum dipilih."});
+  if(!["image/png","image/jpeg","image/webp"].includes(req.file.mimetype)) return res.status(400).json({ok:false,error:"Logo harus PNG, JPG, atau WebP."});
+  if(req.file.size>2*1024*1024) return res.status(400).json({ok:false,error:"Ukuran logo maksimal 2 MB."});
+  try{
+    await pool.query(`UPDATE hospitals SET logo_mime=$1,logo_data=$2,updated_at=NOW() WHERE id=$3`,[req.file.mimetype,req.file.buffer,req.hospitalId||0]);
+    await writeAudit("UPDATE_HOSPITAL_LOGO",{mime:req.file.mimetype,size:req.file.size},req.user.username,req.hospitalId);
+    res.json({ok:true,logoUrl:"/api/hospital/logo?t="+Date.now()});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+app.get("/api/hospital/logo", async (req,res)=>{
+  if(!pool || !dbReady) return res.status(404).end();
+  try{
+    const r=await pool.query(`SELECT logo_mime,logo_data FROM hospitals WHERE id=$1 LIMIT 1`,[req.hospitalId||0]);
+    if(!r.rows.length || !r.rows[0].logo_data) return res.status(404).end();
+    res.setHeader("Content-Type",r.rows[0].logo_mime||"image/png"); res.setHeader("Cache-Control","no-store"); res.end(r.rows[0].logo_data);
+  }catch(error){res.status(500).end();}
+});
+
+app.get("/api/users", requireRole("PENANGGUNG JAWAB"), async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  try{
+    const r=await pool.query(`SELECT id,username,email,name,role,department,status,last_login_at,created_at FROM users WHERE hospital_id=$1 ORDER BY name`,[req.hospitalId||0]);
+    res.json({ok:true,users:r.rows});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
+});
+
+app.post("/api/users", requireRole("PENANGGUNG JAWAB"), async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  const {username,email,name,role,department,password}=req.body||{};
+  if(!clean(username)||!clean(name)||!clean(role)||String(password||"").length<8) return res.status(400).json({ok:false,error:"Username, nama, role, dan password minimal 8 karakter wajib diisi."});
+  const allowed=["DIREKSI","PENANGGUNG JAWAB","PETUGAS LAPANGAN","TEKNISI"];
+  if(!allowed.includes(role)) return res.status(400).json({ok:false,error:"Role tidak valid."});
+  try{
+    const hp=hashPassword(password);
+    const r=await pool.query(`INSERT INTO users(hospital_id,username,email,password_hash,password_salt,name,role,department,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE') RETURNING id,username,email,name,role,department,status`,[req.hospitalId||0,clean(username).toLowerCase(),clean(email),hp.hash,hp.salt,clean(name),role,clean(department)]);
+    await writeAudit("CREATE_USER",{username:clean(username).toLowerCase(),role},req.user.username,req.hospitalId);
+    res.json({ok:true,user:r.rows[0]});
+  }catch(error){res.status(400).json({ok:false,error:error.message});}
+});
+
+app.patch("/api/users/:id/status", requireRole("PENANGGUNG JAWAB"), async (req,res)=>{
+  if(!pool || !dbReady) return res.status(503).json({ok:false,error:"Database belum siap."});
+  const status=clean(req.body?.status).toUpperCase();
+  if(!["ACTIVE","DISABLED"].includes(status)) return res.status(400).json({ok:false,error:"Status tidak valid."});
+  try{
+    const r=await pool.query(`UPDATE users SET status=$1,updated_at=NOW() WHERE id=$2 AND hospital_id=$3 RETURNING id,username,status`,[status,Number(req.params.id),req.hospitalId||0]);
+    if(!r.rows.length) return res.status(404).json({ok:false,error:"User tidak ditemukan."});
+    await writeAudit("UPDATE_USER_STATUS",r.rows[0],req.user.username,req.hospitalId);
+    res.json({ok:true,user:r.rows[0]});
+  }catch(error){res.status(500).json({ok:false,error:error.message});}
 });
 
 /* HEALTHCHECK RAILWAY */
