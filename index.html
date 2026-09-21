@@ -930,7 +930,7 @@ async function loadAuditLogs(){
    LOGIN
 ========================= */
 
-function login(){
+async function login(){
 
   const username =
     document.getElementById("username").value.trim();
@@ -941,57 +941,45 @@ function login(){
   const error =
     document.getElementById("loginError");
 
-  const users = {
+  error.textContent = "";
 
-    direksi:{
-      password:"calibra123",
-      name:"Direksi",
-      role:"DIREKSI"
-    },
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password
+      })
+    });
 
-    pj:{
-      password:"calibra123",
-      name:"Penanggung Jawab",
-      role:"PENANGGUNG JAWAB"
-    },
+    const data = await response.json();
 
-    petugas:{
-      password:"calibra123",
-      name:"Petugas Lapangan",
-      role:"PETUGAS LAPANGAN"
+    if(!response.ok || !data.ok){
+      throw new Error(data.error || "Username atau password salah.");
     }
 
-  };
-
-  if(
-    users[username] &&
-    users[username].password === password
-  ){
-
-    currentUser = {
-      username:username,
-      name:users[username].name,
-      role:users[username].role
-    };
+    currentUser = data.user;
 
     localStorage.setItem(
       "calibraUser",
       JSON.stringify(currentUser)
     );
 
-    error.textContent = "";
+    localStorage.setItem(
+      "calibraToken",
+      data.token
+    );
 
     showApp();
 
-  }else{
-
-    error.textContent =
-      "Username atau password salah.";
-
+  } catch(errorObject) {
+    error.textContent = errorObject.message;
   }
 
 }
-
 
 /* =========================
    SHOW APP
@@ -1039,6 +1027,7 @@ function showApp(){
 function logout(){
 
   localStorage.removeItem("calibraUser");
+  localStorage.removeItem("calibraToken");
 
   currentUser = null;
 
@@ -2196,6 +2185,49 @@ async function viewEvidence(reportId, fallbackEvidenceId){
     alert(error.message);
   }
 }
+/* =========================
+   API AUTH FETCH
+========================= */
+
+(function(){
+  const nativeFetch = window.fetch.bind(window);
+
+  window.fetch = function(input, init){
+    init = init || {};
+
+    let url = "";
+    try {
+      url = typeof input === "string" ? input : input.url;
+    } catch(error) {}
+
+    const isApiRequest =
+      url &&
+      (url.startsWith("/api/") || url.startsWith(window.location.origin + "/api/"));
+
+    if(isApiRequest && !url.endsWith("/api/login")){
+      const token = localStorage.getItem("calibraToken");
+      if(token){
+        const headers = new Headers(init.headers || {});
+        headers.set("Authorization", "Bearer " + token);
+        init.headers = headers;
+      }
+    }
+
+    return nativeFetch(input, init).then(function(response){
+      if(response.status === 401 && isApiRequest && !url.endsWith("/api/login")){
+        localStorage.removeItem("calibraUser");
+        localStorage.removeItem("calibraToken");
+        currentUser = null;
+        document.getElementById("app").classList.add("hidden");
+        document.getElementById("loginPage").classList.remove("hidden");
+        const loginError = document.getElementById("loginError");
+        if(loginError) loginError.textContent = "Sesi berakhir. Silakan login kembali.";
+      }
+      return response;
+    });
+  };
+})();
+
 /* ========================
    HELPERS
 ======================== */
@@ -2243,7 +2275,12 @@ function formatDate(value){
       "calibraUser"
     );
 
-  if(saved){
+  const token =
+    localStorage.getItem(
+      "calibraToken"
+    );
+
+  if(saved && token){
 
     try{
 
@@ -2257,10 +2294,24 @@ function formatDate(value){
       localStorage.removeItem(
         "calibraUser"
       );
+      localStorage.removeItem(
+        "calibraToken"
+      );
 
     }
 
+  }else{
+
+    localStorage.removeItem(
+      "calibraUser"
+    );
+    localStorage.removeItem(
+      "calibraToken"
+    );
+
   }
+
+}
 
 })();
 
