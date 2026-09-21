@@ -1106,7 +1106,7 @@ async function loadIdentity(){
       const hn=document.getElementById("hospitalNameHeader");
       if(hn) hn.textContent=x.name||"Medical Equipment Control Tower";
       const logo=document.getElementById("hospitalLogo");
-      if(logo&&x.logo_url){logo.src=x.logo_url+"?t="+Date.now();logo.classList.remove("hidden");}
+      if(logo&&x.logo_base64&&x.logo_mime){logo.src="data:"+x.logo_mime+";base64,"+x.logo_base64;logo.classList.remove("hidden");}
       if(currentUser.role==="PENANGGUNG JAWAB"){
         document.getElementById("rsAdminPanel").style.display="";
         document.getElementById("userAdminPanel").style.display="";
