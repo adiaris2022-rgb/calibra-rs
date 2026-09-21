@@ -461,7 +461,8 @@ th{
     </button>
 
     <button id="certificateNav" style="display:none;" onclick="showSection('certificates',this)">Sertifikat</button>
-    <button id="auditNav" style="display:none;" onclick="showSection('audit',this)">Audit Log</button>
+    <button id="notificationNav" onclick="showSection('notifications',this)">Notifikasi</button>
+<button id="auditNav" style="display:none;" onclick="showSection('audit',this)">Audit Log</button>
 
   </div>
 
@@ -852,7 +853,13 @@ th{
     <div class="card"><h3>Dokumen Tersimpan</h3><div id="certificateList">Memuat...</div></div>
   </section>
 
-  <section id="audit" class="section">
+  <section id="notifications" class="section">
+  <h1 class="page-title">Notifikasi</h1>
+  <p class="page-desc">Pemberitahuan operasional dari aktivitas CALIBRA RS.</p>
+  <div id="notificationList"></div>
+</section>
+
+<section id="audit" class="section">
     <h1 class="page-title">Audit Log</h1>
     <p class="page-desc">Jejak aktivitas penting CALIBRA RS.</p>
     <div class="card">
@@ -876,16 +883,50 @@ th{
 let currentUser = null;
 
 
+let notificationTimer = null;
+
 async function loadNotifications(){
   if(!currentUser)return;
   try{
-    const response=await fetch("/api/notifications?username="+encodeURIComponent(currentUser.username)+"&role="+encodeURIComponent(currentUser.role),{cache:"no-store"});
+    const response=await fetch("/api/notifications",{cache:"no-store"});
     const data=await response.json();
     if(!response.ok||!data.ok)return;
+
     const unread=data.notifications.filter(function(n){return !n.is_read;}).length;
     const nav=document.getElementById("workOrderNav");
     if(nav) nav.textContent=unread ? "Work Order ("+unread+")" : "Work Order";
+
+    const box=document.getElementById("notificationList");
+    if(box){
+      if(!data.notifications.length){
+        box.innerHTML='<div class="notice blue">Belum ada notifikasi.</div>';
+      }else{
+        box.innerHTML=data.notifications.map(function(n){
+          return '<div style="padding:12px;border-bottom:1px solid #e5e7eb;'+(n.is_read?'':'background:#eff6ff;')+'">'+
+            '<b>'+escapeHtml(n.title)+'</b>'+
+            '<div style="font-size:13px;margin-top:4px;">'+escapeHtml(n.message)+'</div>'+
+            '<div style="font-size:11px;color:#64748b;margin-top:4px;">'+formatDate(n.created_at)+(n.is_read?'':' · BARU')+'</div>'+
+            (n.is_read?'':'<button class="btn" style="margin-top:8px;" onclick="markNotificationRead('+Number(n.id)+')">Tandai dibaca</button>')+
+          '</div>';
+        }).join("");
+      }
+    }
   }catch(error){}
+}
+
+async function markNotificationRead(id){
+  try{
+    const response=await fetch("/api/notifications/"+Number(id)+"/read",{method:"PATCH"});
+    if(!response.ok)throw new Error("Gagal menandai notifikasi.");
+    loadNotifications();
+  }catch(error){}
+}
+
+function startNotificationRealtime(){
+  if(notificationTimer)clearInterval(notificationTimer);
+  notificationTimer=setInterval(function(){
+    if(currentUser)loadNotifications();
+  },5000);
 }
 
 async function uploadCertificate(){
@@ -1011,11 +1052,14 @@ function showApp(){
   }
   const certificateNav=document.getElementById("certificateNav");
   if(certificateNav) certificateNav.style.display=(currentUser.username==="pj"||currentUser.username==="direksi")?"":"none";
+  const notificationNav=document.getElementById("notificationNav");
+  if(notificationNav) notificationNav.style.display="";
   const auditNav=document.getElementById("auditNav");
   if(auditNav) auditNav.style.display=(currentUser.username==="pj"||currentUser.username==="direksi")?"":"none";
 
   loadDashboard();
   loadNotifications();
+  startNotificationRealtime();
 
 }
 
@@ -1080,7 +1124,10 @@ function showSection(id,button){
   loadLiveReports();
   }
 
-  if(id === "workorders"){
+  if(id === "notifications"){
+  loadNotifications();
+}
+if(id === "workorders"){
     if(!currentUser || currentUser.username !== "pj") return;
     loadWorkOrders();
     startWorkOrderRealtime();
