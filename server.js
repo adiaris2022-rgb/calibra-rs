@@ -958,7 +958,7 @@ app.post(
         ]
       );
 
-      await writeAudit("EVIDENCE_UPLOADED",{evidenceId:result.rows[0].id,reportId,equipmentId,evidenceType:clean(req.body.evidenceType||"ORIGINAL").toUpperCase()},"");
+      await writeAudit("EVIDENCE_UPLOADED",{evidenceId:result.rows[0].id,reportId,equipmentId,evidenceType:clean(req.body.evidenceType||"ORIGINAL").toUpperCase()},req.user.username);
       res.json({
         ok: true,
         evidence: result.rows[0],
