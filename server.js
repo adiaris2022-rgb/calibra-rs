@@ -757,6 +757,9 @@ app.post("/api/import-excel/confirm", requireRole("PENANGGUNG JAWAB"), upload.si
       [req.hospitalId||0]
     );
 
+    if (!hospital.rows.length) {
+      return res.status(403).json({ok:false,error:"Tenant rumah sakit tidak ditemukan."});
+    }
     const hospitalId = hospital.rows[0].id;
 
     let imported = 0;
