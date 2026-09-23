@@ -798,13 +798,15 @@ if (!result.rows.length) {
 
       await pool.query(`
         INSERT INTO calibrations (
+          hospital_id,
           equipment_id,
           calibration_date,
           due_date,
           status
         )
-        VALUES ($1,$2,$3,$4)
+        VALUES ($1,$2,$3,$4,$5)
       `, [
+        req.hospitalId||0,
         equipmentId,
         item.calibrationDate || null,
         item.dueDate || null,
@@ -922,14 +924,16 @@ app.post("/api/equipment/:id/qr", requireRole("PENANGGUNG JAWAB"), async (req, r
 
     await pool.query(`
       INSERT INTO equipment_identifiers (
+        hospital_id,
         equipment_id,
         identifier_type,
         identifier_value,
         source
       )
-      VALUES ($1,$2,$3,$4)
+      VALUES ($1,$2,$3,$4,$5)
       ON CONFLICT DO NOTHING
     `, [
+      req.hospitalId||0,
       id,
       type,
       identifier,
