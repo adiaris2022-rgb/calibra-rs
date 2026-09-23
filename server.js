@@ -63,7 +63,10 @@ async function requireAuth(req, res, next) {
         if (r.rows[0].status !== "ACTIVE") return res.status(401).json({ok:false,error:"Akun tidak aktif. Silakan hubungi Admin IPSRS."});
         if (r.rows[0].hospital_id) req.hospitalId = Number(r.rows[0].hospital_id);
       }
-    } catch (error) { console.error("Session user check gagal:",error.message); }
+    } catch (error) {
+      console.error("Session user check gagal:",error.message);
+      return res.status(503).json({ok:false,error:"Validasi sesi ke database gagal. Silakan coba lagi."});
+    }
   }
   req.user = {...user,hospitalId:req.hospitalId||user.hospitalId||null};
   next();
