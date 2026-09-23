@@ -1301,8 +1301,8 @@ app.patch("/api/actions/:id", requireRole("PENANGGUNG JAWAB"), async (req, res) 
     const changedBy = clean(req.user.username);
     await pool.query(
       `INSERT INTO action_status_history (
-        action_id, from_status, to_status, changed_by
-      ) VALUES ($1,$2,$3,$4)`,
+        hospital_id, action_id, from_status, to_status, changed_by
+      ) VALUES ($1,$2,$3,$4,$5)`,
       [req.hospitalId||0,Number(req.params.id), previousStatus, status, changedBy]
     );
 
@@ -1330,7 +1330,7 @@ app.get("/api/field-report/:id/stamped-evidence", async (req, res) => {
        WHERE hospital_id=$2 AND report_id = $1 AND evidence_type = 'STAMPED'
        ORDER BY created_at DESC
        LIMIT 1`,
-      [reportId]
+      [reportId,req.hospitalId||0]
     );
 
     if (!result.rows.length) {
