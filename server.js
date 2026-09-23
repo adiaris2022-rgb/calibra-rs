@@ -431,12 +431,18 @@ app.post("/api/login", async (req, res) => {
     }
   }
 
-  if (!account) {
+  // Once the database is ready, authentication must be database-backed.
+  // The legacy demo fallback is allowed only while the database is unavailable.
+  if (!account && (!pool || !dbReady)) {
     const demo = AUTH_USERS[username];
     if (!demo || demo.password !== password) {
       return res.status(401).json({ ok: false, error: "Username atau password salah." });
     }
     account = { username, name: demo.name, role: demo.role, hospitalId: demo.hospitalId || null, department: null };
+  }
+
+  if (!account) {
+    return res.status(401).json({ ok: false, error: "Username atau password salah." });
   }
 
   const now = Math.floor(Date.now() / 1000);
