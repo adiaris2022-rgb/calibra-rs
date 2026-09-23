@@ -70,6 +70,8 @@ async function requireAuth(req, res, next) {
 }
 
 function requireTenant(req, res, next) {
+  // Railway healthchecks must remain public and tenant-independent.
+  if (req.path === "/health") return next();
   if (REQUIRE_TENANT && !req.hospitalId) {
     return res.status(403).json({
       ok: false,
