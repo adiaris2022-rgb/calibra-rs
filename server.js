@@ -225,119 +225,82 @@ function mapRow(row, number) {
 async function initDb() {
   if (!pool) return;
 
+  // 1) Base tenant + identity tables.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS hospitals (
-      id SERIAL PRIMARY KEY,
-      code TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      address TEXT,
-      city TEXT,
-      phone TEXT,
-      email TEXT,
-      logo_mime TEXT,
-      logo_data BYTEA,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
+      id SERIAL PRIMARY KEY, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+      address TEXT, city TEXT, phone TEXT, email TEXT,
+      logo_mime TEXT, logo_data BYTEA,
+      created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      hospital_id INTEGER REFERENCES hospitals(id) ON DELETE CASCADE,
-      username TEXT UNIQUE NOT NULL,
-      email TEXT,
-      password_hash TEXT NOT NULL,
-      password_salt TEXT NOT NULL,
-      name TEXT NOT NULL,
-      role TEXT NOT NULL,
-      department TEXT,
-      status TEXT DEFAULT 'ACTIVE',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      last_login_at TIMESTAMPTZ
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id) ON DELETE CASCADE,
+      username TEXT UNIQUE NOT NULL, email TEXT, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL,
+      name TEXT NOT NULL, role TEXT NOT NULL, department TEXT, status TEXT DEFAULT 'ACTIVE',
+      created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), last_login_at TIMESTAMPTZ
     );
-
     CREATE TABLE IF NOT EXISTS equipment (
-      id SERIAL PRIMARY KEY,
-      hospital_id INTEGER REFERENCES hospitals(id),
-      asset_code TEXT NOT NULL,
-      name TEXT NOT NULL,
-      brand TEXT,
-      model TEXT,
-      serial_number TEXT,
-      room TEXT,
-      calibration_date DATE,
-      due_date DATE,
-      condition TEXT DEFAULT 'BAIK',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id), asset_code TEXT NOT NULL, name TEXT NOT NULL,
+      brand TEXT, model TEXT, serial_number TEXT, room TEXT, calibration_date DATE, due_date DATE,
+      condition TEXT DEFAULT 'BAIK', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(hospital_id, asset_code)
     );
-
     CREATE TABLE IF NOT EXISTS equipment_identifiers (
-      id SERIAL PRIMARY KEY,
-      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
-      identifier_type TEXT NOT NULL,
-      identifier_value TEXT NOT NULL,
-      source TEXT DEFAULT 'CALIBRA',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(equipment_id, identifier_type, identifier_value)
+      id SERIAL PRIMARY KEY, equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
+      identifier_type TEXT NOT NULL, identifier_value TEXT NOT NULL, source TEXT DEFAULT 'CALIBRA',
+      created_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(equipment_id, identifier_type, identifier_value)
     );
-
     CREATE TABLE IF NOT EXISTS calibrations (
-      id SERIAL PRIMARY KEY,
-      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
-      calibration_date DATE,
-      due_date DATE,
-      status TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      id SERIAL PRIMARY KEY, equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
+      calibration_date DATE, due_date DATE, status TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS inspections (
-      id SERIAL PRIMARY KEY,
-      hospital_id INTEGER REFERENCES hospitals(id),
-      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
-      condition TEXT,
-      findings TEXT,
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
+      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE, condition TEXT, findings TEXT,
       inspected_at TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS field_reports (
-      id SERIAL PRIMARY KEY,
-      hospital_id INTEGER REFERENCES hospitals(id),
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
+      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE, report TEXT NOT NULL,
+      status TEXT DEFAULT 'OPEN', created_at TIMESTAMPTZ DEFAULT NOW(), officer_username TEXT
+    );
+    CREATE TABLE IF NOT EXISTS evidence_files (
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
       equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
-      report TEXT NOT NULL,
-      status TEXT DEFAULT 'OPEN',
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE, original_name TEXT,
+      mime_type TEXT NOT NULL, file_size INTEGER, file_data BYTEA NOT NULL,
+      evidence_type TEXT DEFAULT 'ORIGINAL', created_at TIMESTAMPTZ DEFAULT NOW()
     );
-CREATE TABLE IF NOT EXISTS evidence_files (
-  id SERIAL PRIMARY KEY,
-  hospital_id INTEGER REFERENCES hospitals(id),
-  equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
-  report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE,
-  original_name TEXT,
-  mime_type TEXT NOT NULL,
-  file_size INTEGER,
-  file_data BYTEA NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
     CREATE TABLE IF NOT EXISTS audit_logs (
-      id SERIAL PRIMARY KEY,
-      action TEXT NOT NULL,
-      details JSONB,
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
+      action TEXT NOT NULL, details JSONB, created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS actions (
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
+      report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE,
+      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE, title TEXT NOT NULL,
+      description TEXT, assigned_to TEXT, status TEXT DEFAULT 'NEW', created_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS action_status_history (
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
+      action_id INTEGER REFERENCES actions(id) ON DELETE CASCADE, from_status TEXT,
+      to_status TEXT NOT NULL, changed_by TEXT, changed_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS certificate_files (
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
+      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE, original_name TEXT,
+      mime_type TEXT NOT NULL, file_size INTEGER, file_data BYTEA NOT NULL, uploaded_by TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY, hospital_id INTEGER REFERENCES hospitals(id),
+      recipient_role TEXT, recipient_username TEXT, title TEXT NOT NULL, message TEXT NOT NULL,
+      is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
 
-  await pool.query(`
-    ALTER TABLE evidence_files
-    ADD COLUMN IF NOT EXISTS evidence_type TEXT DEFAULT 'ORIGINAL'
-  `);
-
-  await pool.query(`
-    ALTER TABLE field_reports
-    ADD COLUMN IF NOT EXISTS officer_username TEXT
-  `);
-
+  // 2) Forward-compatible columns for databases created by older CALIBRA versions.
   await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS address TEXT`);
   await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS city TEXT`);
   await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS phone TEXT`);
@@ -357,6 +320,17 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   await pool.query(`ALTER TABLE calibrations ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
   await pool.query(`ALTER TABLE equipment_identifiers ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
   await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS hospital_id INTEGER REFERENCES hospitals(id)`);
+
+  // 3) Ensure demo tenant exists before assigning legacy rows.
+  await pool.query(`
+    INSERT INTO hospitals (code,name) VALUES ('RS-DEMO','Rumah Sakit Demo')
+    ON CONFLICT (code) DO NOTHING
+  `);
+  const demoHospital=await pool.query(`SELECT id FROM hospitals WHERE code='RS-DEMO' LIMIT 1`);
+  const hid=demoHospital.rows[0]?.id||null;
+  if(hid) await pool.query(`UPDATE equipment SET hospital_id=$1 WHERE hospital_id IS NULL`,[hid]);
+
+  // 4) Backfill tenant ownership now that every referenced table exists.
   await pool.query(`UPDATE inspections i SET hospital_id=e.hospital_id FROM equipment e WHERE i.equipment_id=e.id AND i.hospital_id IS NULL`);
   await pool.query(`UPDATE field_reports r SET hospital_id=e.hospital_id FROM equipment e WHERE r.equipment_id=e.id AND r.hospital_id IS NULL`);
   await pool.query(`UPDATE evidence_files ev SET hospital_id=e.hospital_id FROM equipment e WHERE ev.equipment_id=e.id AND ev.hospital_id IS NULL`);
@@ -366,129 +340,42 @@ CREATE TABLE IF NOT EXISTS evidence_files (
   await pool.query(`UPDATE calibrations c SET hospital_id=e.hospital_id FROM equipment e WHERE c.equipment_id=e.id AND c.hospital_id IS NULL`);
   await pool.query(`UPDATE equipment_identifiers i SET hospital_id=e.hospital_id FROM equipment e WHERE i.equipment_id=e.id AND i.hospital_id IS NULL`);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS actions (
-      id SERIAL PRIMARY KEY,
-      hospital_id INTEGER REFERENCES hospitals(id),
-      report_id INTEGER REFERENCES field_reports(id) ON DELETE CASCADE,
-      equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      description TEXT,
-      assigned_to TEXT,
-      status TEXT DEFAULT 'NEW',
-      created_by TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS action_status_history (
-      id SERIAL PRIMARY KEY,
-      hospital_id INTEGER REFERENCES hospitals(id),
-      action_id INTEGER REFERENCES actions(id) ON DELETE CASCADE,
-      from_status TEXT,
-      to_status TEXT NOT NULL,
-      changed_by TEXT,
-      changed_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE TABLE IF NOT EXISTS certificate_files (
-    id SERIAL PRIMARY KEY,
-    hospital_id INTEGER REFERENCES hospitals(id),
-    equipment_id INTEGER REFERENCES equipment(id) ON DELETE CASCADE,
-    original_name TEXT,
-    mime_type TEXT NOT NULL,
-    file_size INTEGER,
-    file_data BYTEA NOT NULL,
-    uploaded_by TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  )`);
-  await pool.query(`CREATE TABLE IF NOT EXISTS notifications (
-    id SERIAL PRIMARY KEY,
-    hospital_id INTEGER REFERENCES hospitals(id),
-    recipient_role TEXT,
-    recipient_username TEXT,
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  )`);
-
-  // Backfill the initial status event for existing Work Orders.
-  await pool.query(`
-    INSERT INTO action_status_history (
-      action_id, from_status, to_status, changed_by, changed_at
-    )
-    SELECT
-      a.id,
-      NULL,
-      a.status,
-      COALESCE(a.created_by, ''),
-      a.created_at
-    FROM actions a
-    WHERE NOT EXISTS (
-      SELECT 1 FROM action_status_history h WHERE h.action_id = a.id
-    )
-  `);
-
-  // Seed satu Work Order demo agar alur PJ dapat langsung diuji.
-  await pool.query(`
-    INSERT INTO actions (
-      report_id,
-      equipment_id,
-      title,
-      description,
-      assigned_to,
-      status,
-      created_by
-    )
-    SELECT
-      fr.id,
-      fr.equipment_id,
-      'Pemeriksaan Patient Monitor',
-      'Periksa alarm dan lakukan troubleshooting.',
-      'Teknisi IPSRS',
-      'NEW',
-      'pj'
-    FROM field_reports fr
-    JOIN equipment e ON e.id = fr.equipment_id
-    WHERE e.asset_code = 'ICU-101'
-      AND NOT EXISTS (SELECT 1 FROM actions)
-    ORDER BY fr.created_at DESC
-    LIMIT 1
-  `);
-
-
-  await pool.query(`
-    INSERT INTO hospitals (code, name)
-    VALUES ('RS-DEMO', 'Rumah Sakit Demo')
-    ON CONFLICT (code) DO NOTHING
-  `);
-
-  await pool.query(`UPDATE equipment SET hospital_id = (SELECT id FROM hospitals WHERE code = 'RS-DEMO') WHERE hospital_id IS NULL`);
-
-  const demoHospital = await pool.query(`SELECT id FROM hospitals WHERE code = 'RS-DEMO' LIMIT 1`);
-  if (demoHospital.rows[0]) {
-    const hid = demoHospital.rows[0].id;
-    const demoUsers = [
-      { username: "direksi", email: "direksi@rs-demo.local", name: "Direksi", role: "DIREKSI", department: "Manajemen", password: process.env.CALIBRA_DIREKSI_PASSWORD || "calibra123" },
-      { username: "pj", email: "ipsrs@rs-demo.local", name: "Admin IPSRS / Penanggung Jawab", role: "PENANGGUNG JAWAB", department: "IPSRS", password: process.env.CALIBRA_PJ_PASSWORD || "calibra123" },
-      { username: "petugas", email: "petugas@rs-demo.local", name: "Petugas Lapangan", role: "PETUGAS LAPANGAN", department: "IPSRS", password: process.env.CALIBRA_PETUGAS_PASSWORD || "calibra123" }
+  // 5) Seed/repair demo users.
+  if(hid){
+    const demoUsers=[
+      {username:"direksi",email:"direksi@rs-demo.local",name:"Direksi",role:"DIREKSI",department:"Manajemen",password:process.env.CALIBRA_DIREKSI_PASSWORD||"calibra123"},
+      {username:"pj",email:"ipsrs@rs-demo.local",name:"Admin IPSRS / Penanggung Jawab",role:"PENANGGUNG JAWAB",department:"IPSRS",password:process.env.CALIBRA_PJ_PASSWORD||"calibra123"},
+      {username:"petugas",email:"petugas@rs-demo.local",name:"Petugas Lapangan",role:"PETUGAS LAPANGAN",department:"IPSRS",password:process.env.CALIBRA_PETUGAS_PASSWORD||"calibra123"}
     ];
-    for (const u of demoUsers) {
-      const existing = await pool.query(`SELECT id FROM users WHERE username = $1 LIMIT 1`, [u.username]);
-      if (!existing.rows.length) {
-        const hp = hashPassword(u.password);
-        await pool.query(`
-          INSERT INTO users (hospital_id,username,email,password_hash,password_salt,name,role,department,status)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE')
-        `, [hid,u.username,u.email,hp.hash,hp.salt,u.name,u.role,u.department]);
+    for(const u of demoUsers){
+      const ex=await pool.query(`SELECT id FROM users WHERE username=$1 LIMIT 1`,[u.username]);
+      if(!ex.rows.length){
+        const hp=hashPassword(u.password);
+        await pool.query(`INSERT INTO users(hospital_id,username,email,password_hash,password_salt,name,role,department,status)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE')`,[hid,u.username,u.email,hp.hash,hp.salt,u.name,u.role,u.department]);
       }
     }
   }
 
-  dbReady = true;
+  // 6) Seed one demo work order only if no work order exists, and keep its tenant explicit.
+  if(hid){
+    await pool.query(`
+      INSERT INTO actions(hospital_id,report_id,equipment_id,title,description,assigned_to,status,created_by)
+      SELECT $1,fr.id,fr.equipment_id,'Pemeriksaan Patient Monitor',
+             'Periksa alarm dan lakukan troubleshooting.','Teknisi IPSRS','NEW','pj'
+      FROM field_reports fr JOIN equipment e ON e.id=fr.equipment_id
+      WHERE e.hospital_id=$1 AND e.asset_code='ICU-101' AND NOT EXISTS(SELECT 1 FROM actions)
+      ORDER BY fr.created_at DESC LIMIT 1
+    `,[hid]);
+    await pool.query(`
+      INSERT INTO action_status_history(hospital_id,action_id,from_status,to_status,changed_by,changed_at)
+      SELECT a.hospital_id,a.id,NULL,a.status,COALESCE(a.created_by,''),a.created_at
+      FROM actions a
+      WHERE NOT EXISTS(SELECT 1 FROM action_status_history h WHERE h.action_id=a.id)
+    `);
+  }
+
+  dbReady=true;
   console.log("Database siap");
 }
 
